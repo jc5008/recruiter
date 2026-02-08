@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { LiveAvatarSession } from '@heygen/liveavatar-web-sdk';
+import { LiveAvatarSession, SessionEvent } from '@heygen/liveavatar-web-sdk';
 
 type ChatMessage = {
   sender: 'User' | 'Avatar';
@@ -13,9 +13,17 @@ export default function Home() {
   const [session, setSession] = useState<LiveAvatarSession | null>(null);
   const [transcripts, setTranscripts] = useState<ChatMessage[]>([]);
   const [streamActive, setStreamActive] = useState(false);
+  const [streamReady, setStreamReady] = useState(false);
   const [debugInfo, setDebugInfo] = useState<string>("");
+  const [livekitUrl, setLivekitUrl] = useState<string>("");
+  const [livekitToken, setLivekitToken] = useState<string>("");
   const videoRef = useRef<HTMLVideoElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  const addDebug = (msg: string) => {
+    console.log(msg);
+    setDebugInfo(prev => prev + "\n" + msg);
+  };
 
   // Auto-scroll chat
   useEffect(() => {
@@ -24,78 +32,70 @@ export default function Home() {
     }
   }, [transcripts]);
 
-  const addDebug = (msg: string) => {
-    console.log(msg);
-    setDebugInfo(prev => prev + "\n" + msg);
-  };
+  // When SDK reports stream ready, attach the video element so user can see and hear the avatar
+  useEffect(() => {
+    if (!streamReady || !session || !videoRef.current) return;
+    addDebug("Attaching video element to avatar stream...");
+    try {
+      session.attach(videoRef.current);
+      addDebug("Attach completed. Starting playback...");
+      videoRef.current.play()
+        .then(() => {
+          addDebug("Avatar video/audio playback started.");
+          setStreamActive(true);
+          setStatus('Connected');
+        })
+        .catch((e: Error) => {
+          addDebug("Autoplay blocked: " + e.message);
+          setStatus('Click "Force Play" to hear and see the avatar');
+        });
+    } catch (e: unknown) {
+      addDebug("Attach error: " + (e instanceof Error ? e.message : String(e)));
+    }
+  }, [streamReady, session]);
 
   const startSession = async () => {
     setStatus('Initializing...');
     setTranscripts([]);
+    setStreamReady(false);
+    setStreamActive(false);
     setDebugInfo("Starting...");
-    
+
     try {
+      // Use token-only so the SDK is the only one that calls start (avoids "Session already exists")
       const response = await fetch('/api/token', { method: 'POST' });
       const data = await response.json();
 
-      if (!data.data?.session_token) throw new Error("No token found");
+      if (!response.ok) throw new Error(data.error ?? "Token failed");
 
-      // --- NEW DEBUGGING CODE ---
-      console.log("============================================");
-      console.log("🔴 COPY THESE VALUES FOR THE LIVEKIT TESTER:");
-      console.log("URL:", data.data.livekit_url || "wss://heygen-....livekit.cloud"); 
-      console.log("TOKEN:", data.data.livekit_access_token || data.data.access_token);
-      console.log("============================================");
-      // --------------------------
+      const sessionToken = data.data?.session_token ?? data.session_token;
+      if (!sessionToken) throw new Error("No session token found");
 
-      const newSession = new LiveAvatarSession(data.data.session_token, {
-        voiceChat: true
+      const newSession = new LiveAvatarSession(sessionToken, {
+        voiceChat: true,
       });
 
-      // --- CRITICAL: MEDIA HANDLING ---
-      const handleStream = (stream: MediaStream) => {
-        addDebug(`Stream received with ${stream.getTracks().length} tracks`);
-        
-        stream.getTracks().forEach(track => {
-            addDebug(`Track found: ${track.kind} (enabled: ${track.enabled})`);
-        });
+      // SDK: when the avatar stream is ready, we attach the video element via session.attach() in a useEffect
+      newSession.on(SessionEvent.SESSION_STREAM_READY, () => {
+        addDebug("Avatar stream ready (session.stream_ready)");
+        setStreamReady(true);
+      });
 
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          videoRef.current.onloadedmetadata = () => {
-            addDebug("Video metadata loaded. Attempting play...");
-            videoRef.current?.play()
-              .then(() => {
-                  addDebug("Playback started successfully!");
-                  setStreamActive(true);
-                  setStatus('Connected');
-              })
-              .catch(e => {
-                  addDebug("Autoplay blocked: " + e.message);
-                  setStatus('Click "Force Play" button!');
-              });
-          };
-        }
-      };
-
-      // Listen to ALL possible events
-      newSession.on("stream-ready" as any, (e: any) => handleStream(e.detail || e));
-      newSession.on("stream" as any, (e: any) => handleStream(e.detail || e));
-
-      // Transcript handling
+      // Transcript handling (use SDK event names)
       newSession.on("user.transcription" as any, (e: any) => {
-        setTranscripts(prev => [...prev, { sender: 'User', text: e.detail?.text || e.text }]);
+        const text = e?.detail?.text ?? e?.text ?? '';
+        if (text) setTranscripts(prev => [...prev, { sender: 'User', text }]);
       });
       newSession.on("avatar.transcription" as any, (e: any) => {
-        setTranscripts(prev => [...prev, { sender: 'Avatar', text: e.detail?.text || e.text }]);
+        const text = e?.detail?.text ?? e?.text ?? '';
+        if (text) setTranscripts(prev => [...prev, { sender: 'Avatar', text }]);
       });
 
       await newSession.start();
       setSession(newSession);
-      setStatus('Waiting for media...');
-
+      setStatus('Waiting for avatar stream...');
     } catch (error: any) {
-      addDebug("Error: " + error.message);
+      addDebug("Error: " + (error?.message ?? String(error)));
       setStatus("Failed");
     }
   };
@@ -104,8 +104,35 @@ export default function Home() {
     await session?.stop();
     setSession(null);
     setStreamActive(false);
+    setStreamReady(false);
     setStatus('Idle');
   };
+
+  const fetchLiveKitCredentials = async () => {
+    addDebug("Fetching LiveKit credentials (uses a separate test session)...");
+    try {
+      const response = await fetch('/api/start', { method: 'POST' });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error ?? "Failed");
+      setLivekitUrl(data.livekit_url ?? "");
+      setLivekitToken(data.livekit_client_token ?? "");
+      addDebug("LiveKit URL and Room Token ready for connection test.");
+    } catch (e: unknown) {
+      addDebug("Error: " + (e instanceof Error ? e.message : String(e)));
+    }
+  };
+
+  const copyToClipboard = (text: string, label: string) => {
+    navigator.clipboard.writeText(text).then(
+      () => addDebug(`Copied ${label}`),
+      () => addDebug(`Failed to copy ${label}`)
+    );
+  };
+
+  const meetUrl =
+    livekitUrl && livekitToken
+      ? `https://meet.livekit.io/custom?liveKitUrl=${encodeURIComponent(livekitUrl)}&token=${encodeURIComponent(livekitToken)}`
+      : "";
 
   // Manual override for browser restrictions
   const forcePlay = () => {
@@ -161,6 +188,124 @@ export default function Home() {
             >
               End Session
             </button>
+          )}
+        </div>
+
+        {/* LiveKit connection test (per https://docs.liveavatar.com/docs/quick-start-guide step 3) */}
+        <div className="mt-4 w-full max-w-2xl bg-gray-950 p-4 border border-gray-800 rounded space-y-3">
+          <div className="text-xs font-bold text-amber-400 uppercase tracking-wide">
+            LiveKit connection test
+          </div>
+          {!(livekitUrl || livekitToken) ? (
+            <>
+              <p className="text-xs text-gray-400">
+                Get URL and Room Token to test at{" "}
+                <a
+                  href="https://livekit.io/connection-test"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-blue-400 hover:underline"
+                >
+                  livekit.io/connection-test
+                </a>
+                . Uses a separate test session (not the in-app conversation).
+              </p>
+              <button
+                type="button"
+                onClick={fetchLiveKitCredentials}
+                className="px-4 py-2 bg-amber-600/30 hover:bg-amber-600/50 text-amber-300 rounded text-sm border border-amber-600/50"
+              >
+                Get LiveKit credentials
+              </button>
+            </>
+          ) : (
+            <>
+              <p className="text-xs text-gray-400">
+                Use these at{" "}
+                <a
+                  href="https://livekit.io/connection-test"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-blue-400 hover:underline"
+                >
+                  livekit.io/connection-test
+                </a>{" "}
+                or open the meet URL to join the room in your browser.
+              </p>
+              {livekitUrl && (
+              <div>
+                <label className="text-[10px] text-gray-500 block mb-1">LiveKit URL</label>
+                <div className="flex gap-2">
+                  <input
+                    readOnly
+                    value={livekitUrl}
+                    className="flex-1 min-w-0 bg-gray-900 text-gray-300 text-xs font-mono p-2 rounded border border-gray-700"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => copyToClipboard(livekitUrl, "LiveKit URL")}
+                    className="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded text-xs whitespace-nowrap"
+                  >
+                    Copy
+                  </button>
+                </div>
+              </div>
+            )}
+            {livekitToken && (
+              <div>
+                <label className="text-[10px] text-gray-500 block mb-1">Room Token</label>
+                <div className="flex gap-2">
+                  <input
+                    readOnly
+                    value={livekitToken}
+                    className="flex-1 min-w-0 bg-gray-900 text-gray-300 text-xs font-mono p-2 rounded border border-gray-700 truncate"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => copyToClipboard(livekitToken, "Room Token")}
+                    className="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded text-xs whitespace-nowrap"
+                  >
+                    Copy
+                  </button>
+                </div>
+              </div>
+            )}
+            {meetUrl && (
+              <div>
+                <label className="text-[10px] text-gray-500 block mb-1">Meet URL (join room)</label>
+                <div className="flex gap-2">
+                  <input
+                    readOnly
+                    value={meetUrl}
+                    className="flex-1 min-w-0 bg-gray-900 text-gray-300 text-xs font-mono p-2 rounded border border-gray-700 truncate"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => copyToClipboard(meetUrl, "Meet URL")}
+                    className="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded text-xs whitespace-nowrap"
+                  >
+                    Copy
+                  </button>
+                  <a
+                    href={meetUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 rounded text-xs whitespace-nowrap"
+                  >
+                    Open
+                  </a>
+                </div>
+              </div>
+            )}
+              <a
+                href="https://livekit.io/connection-test"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-block px-3 py-1.5 bg-amber-600/20 hover:bg-amber-600/30 text-amber-400 rounded text-xs border border-amber-600/50"
+              >
+                Open LiveKit Connection Tester →
+              </a>
+            </>
           )}
         </div>
 
