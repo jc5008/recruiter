@@ -88,6 +88,11 @@ Create `.env.local` in the project root:
 |---------------------------|----------|-------------|
 | `LIVEAVATAR_API_KEY`      | Yes      | HeyGen Live Avatar API key. |
 | `NEXT_PUBLIC_CONTEXT_ID`  | No       | Optional context/persona ID passed as `avatar_persona.context_id` when requesting the session token. |
+| `sql_DATABASE_URL`        | No*      | Neon PostgreSQL connection string. Required for interview codes, transcripts, admin, and reports. See `schema/README.md` to run the schema. |
+
+\* Required once you implement Phase 1 (interview codes, persistence). Until then, the app runs without a database.
+
+**Database (Neon):** To use interview codes, transcripts, or admin features, create a Neon project, run `schema/001_initial.sql` once (see `schema/README.md`), and set `sql_DATABASE_URL` in `.env.local`. The app uses `lib/db.ts` for server-side queries.
 
 ### Install and Run
 
@@ -112,16 +117,27 @@ npm start
 ```
 app/
   layout.tsx          # Root layout, metadata, Geist fonts, globals.css
-  page.tsx             # Single-page Virtual Interview UI (client component)
+  page.tsx             # Welcome page (interview code entry)
   globals.css          # Tailwind + design tokens and component styles
+  interview/
+    page.tsx           # Virtual Interview UI (gated by valid code)
   api/
     token/route.ts     # POST: get Live Avatar session token
     start/route.ts     # POST: get token + start session, return LiveKit fields
+    validate-code/route.ts  # POST: validate interview code, return interviewId
+    dev/create-test-interview/route.ts  # POST (dev only): create test interview, return accessCode
+lib/
+  db.ts                # Neon serverless SQL client (server-side only)
+schema/
+  001_initial.sql      # Initial DB schema (users, requisitions, interviews, etc.)
+  README.md            # How to run the schema on Neon
 public/
   wvs_logo.png         # WV Supply logo in header
 ```
 
-The main application logic and UI live in `app/page.tsx`; API keys and server-only config stay in the API routes and environment variables.
+The welcome page is `app/page.tsx`; the interview UI is `app/interview/page.tsx` (gated by a valid interview code). API keys and server-only config stay in the API routes and environment variables.
+
+**Test interview code:** Run `npm run seed` (with `sql_DATABASE_URL` set and schema applied) to create a test interview with code **TEST-2026**. In development you can also `POST /api/dev/create-test-interview` to get a new code.
 
 ---
 
