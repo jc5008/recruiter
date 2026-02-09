@@ -90,6 +90,9 @@ export default function WelcomePage() {
       micStreamRef.current = stream;
       const ctx = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
       audioContextRef.current = ctx;
+      if (ctx.state === 'suspended') {
+        await ctx.resume();
+      }
       const source = ctx.createMediaStreamSource(stream);
       const analyser = ctx.createAnalyser();
       analyser.fftSize = 256;
@@ -100,37 +103,43 @@ export default function WelcomePage() {
       const dataArray = new Uint8Array(analyser.frequencyBinCount);
       let recordingStarted = false;
       let recordingStartTime = 0;
+      const VOICE_THRESHOLD = 1;
+      const startRecording = () => {
+        if (recordingStarted) return;
+        recordingStarted = true;
+        recordingStartTime = Date.now();
+        recordedChunksRef.current = [];
+        const recorder = new MediaRecorder(stream);
+        recorder.ondataavailable = (e) => {
+          if (e.data.size) recordedChunksRef.current.push(e.data);
+        };
+        recorder.onstop = () => {
+          if (micAnimationRef.current) cancelAnimationFrame(micAnimationRef.current);
+          micStreamRef.current?.getTracks().forEach((t) => t.stop());
+          micStreamRef.current = null;
+          const mime = recordedChunksRef.current[0]?.type || 'audio/webm';
+          const blob = new Blob(recordedChunksRef.current, { type: mime });
+          const url = URL.createObjectURL(blob);
+          const audio = new Audio(url);
+          playbackAudioRef.current = audio;
+          setAudioTestStep('mic-playback');
+          setMicLevel(0);
+          audio.onended = () => {
+            URL.revokeObjectURL(url);
+          };
+          audio.play().catch(() => setAudioTestStep('mic'));
+        };
+        recorder.start(100);
+        setTimeout(() => recorder.stop(), 3000);
+      };
       const tick = () => {
         if (!micAnalyserRef.current) return;
         analyser.getByteFrequencyData(dataArray);
         const avg = dataArray.reduce((a, b) => a + b, 0) / dataArray.length;
         const level = Math.min(100, (avg / 128) * 120);
         setMicLevel(level);
-        if (level > 3 && !recordingStarted) {
-          recordingStarted = true;
-          recordingStartTime = Date.now();
-          recordedChunksRef.current = [];
-          const recorder = new MediaRecorder(stream);
-          recorder.ondataavailable = (e) => {
-            if (e.data.size) recordedChunksRef.current.push(e.data);
-          };
-          recorder.onstop = () => {
-            if (micAnimationRef.current) cancelAnimationFrame(micAnimationRef.current);
-            micStreamRef.current?.getTracks().forEach((t) => t.stop());
-            micStreamRef.current = null;
-            const blob = new Blob(recordedChunksRef.current, { type: 'audio/webm' });
-            const url = URL.createObjectURL(blob);
-            const audio = new Audio(url);
-            playbackAudioRef.current = audio;
-            setAudioTestStep('mic-playback');
-            setMicLevel(0);
-            audio.onended = () => {
-              URL.revokeObjectURL(url);
-            };
-            audio.play().catch(() => setAudioTestStep('mic'));
-          };
-          recorder.start(100);
-          setTimeout(() => recorder.stop(), 3000);
+        if (level > VOICE_THRESHOLD && !recordingStarted) {
+          startRecording();
         }
         if (recordingStarted && Date.now() - recordingStartTime > 3200) return;
         micAnimationRef.current = requestAnimationFrame(tick);
@@ -139,6 +148,32 @@ export default function WelcomePage() {
     } catch {
       setAudioTestStep('mic');
     }
+  };
+
+  const startMicRecordingManual = () => {
+    const stream = micStreamRef.current;
+    if (!stream) return;
+    if (micAnimationRef.current) cancelAnimationFrame(micAnimationRef.current);
+    recordedChunksRef.current = [];
+    const recorder = new MediaRecorder(stream);
+    recorder.ondataavailable = (e) => {
+      if (e.data.size) recordedChunksRef.current.push(e.data);
+    };
+    recorder.onstop = () => {
+      micStreamRef.current?.getTracks().forEach((t) => t.stop());
+      micStreamRef.current = null;
+      const mime = recordedChunksRef.current[0]?.type || 'audio/webm';
+      const blob = new Blob(recordedChunksRef.current, { type: mime });
+      const url = URL.createObjectURL(blob);
+      const audio = new Audio(url);
+      playbackAudioRef.current = audio;
+      setAudioTestStep('mic-playback');
+      setMicLevel(0);
+      audio.onended = () => URL.revokeObjectURL(url);
+      audio.play().catch(() => setAudioTestStep('mic'));
+    };
+    recorder.start(100);
+    setTimeout(() => recorder.stop(), 3000);
   };
 
   const goToMicStep = () => {
@@ -306,7 +341,19 @@ export default function WelcomePage() {
                           {audioTestStep === 'mic-playback' ? 'Playing back…' : micLevel > 3 ? 'Recording…' : 'Speak to see level'}
                         </span>
                       </div>
-                      {audioTestStep === 'mic' && <p className="sub-text text-xs">Say something — recording will start automatically when we detect sound.</p>}
+                      {audioTestStep === 'mic' && (
+                        <>
+                          <p className="sub-text text-xs">Say something — recording will start automatically when we detect sound.</p>
+                          <button
+                            type="button"
+                            onClick={startMicRecordingManual}
+                            className="btn btn-primary w-full text-sm mt-2"
+                          >
+                            Record 3 seconds
+                          </button>
+                          <p className="sub-text text-xs mt-1">If the mic isn&apos;t detected, tap here to record anyway.</p>
+                        </>
+                      )}
                       {audioTestStep === 'mic-playback' && (
                         <div className="flex gap-2 flex-wrap">
                           <button type="button" onClick={goToMicStep} className="btn btn-primary flex-1 min-w-[80px]">Repeat</button>

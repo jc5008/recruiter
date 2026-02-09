@@ -6,7 +6,7 @@ const VALID_STATUSES = ['REGISTERED', 'ACTIVE'];
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const code = typeof body?.code === 'string' ? body.code.trim().toUpperCase() : '';
+    const code = typeof body?.code === 'string' ? body.code.trim() : '';
 
     if (!code) {
       return NextResponse.json(
@@ -16,10 +16,11 @@ export async function POST(request: Request) {
     }
 
     const sql = getSql();
+    // Case-insensitive match so Demo001, demo001, DEMO001 all work
     const rows = await sql`
       SELECT id, candidate_first_name, deadline_at, status, started_at
       FROM interviews
-      WHERE access_code = ${code}
+      WHERE access_code ILIKE ${code}
       LIMIT 1
     `;
 
