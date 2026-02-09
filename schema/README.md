@@ -9,7 +9,9 @@ Schema for the Virtual Interviewer app, aligned with the Project Description (Fe
 Before using interview codes or the database, confirm:
 
 1. **Run the schema once** (see options below).  
-2. **Set `sql_DATABASE_URL`** in `.env.local` to your Neon connection string.
+2. **Set `sql_DATABASE_URL`** in `.env.local` to your Neon connection string.  
+3. **Set `ADMIN_SESSION_SECRET`** in `.env.local` (at least 16 characters) for admin login cookies.  
+4. **Run `npm run seed`** to create a seed admin user and test interviews (admin login: seed@wvsupply.local / changeme).
 
 ---
 

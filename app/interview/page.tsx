@@ -179,7 +179,7 @@ export default function InterviewPage() {
         })
         .catch((e: Error) => {
           addDebug('Autoplay blocked: ' + e.message);
-          setStatus('Click "Force Play" to hear and see the avatar');
+          setStatus('If video doesn\'t start, tap the video or check your browser settings.');
         });
     } catch (e: unknown) {
       addDebug('Attach error: ' + (e instanceof Error ? e.message : String(e)));
@@ -608,7 +608,7 @@ export default function InterviewPage() {
               <button type="button" className="text-sm sub-text hover:opacity-80" onClick={() => setShowDiagnosticsDialog(false)}>Close</button>
             </div>
             <div className="p-4 flex flex-col gap-4 overflow-y-auto">
-              <div>
+              <div className="hidden md:block">
                 <button type="button" onClick={forcePlay} className="btn btn-primary">▶ Force Play</button>
                 <p className="sub-text text-xs mt-2">Use if audio or video does not start automatically.</p>
               </div>

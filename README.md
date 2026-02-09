@@ -89,10 +89,11 @@ Create `.env.local` in the project root:
 | `LIVEAVATAR_API_KEY`      | Yes      | HeyGen Live Avatar API key. |
 | `NEXT_PUBLIC_CONTEXT_ID`  | No       | Optional context/persona ID passed as `avatar_persona.context_id` when requesting the session token. |
 | `sql_DATABASE_URL`        | No*      | Neon PostgreSQL connection string. Required for interview codes, transcripts, admin, and reports. See `schema/README.md` to run the schema. |
+| `ADMIN_SESSION_SECRET`    | No*      | Secret for signing admin session cookies (at least 16 characters). Required for `/admin` login. |
 
 \* Required once you implement Phase 1 (interview codes, persistence). Until then, the app runs without a database.
 
-**Database (Neon):** To use interview codes, transcripts, or admin features, create a Neon project, run `schema/001_initial.sql` once (see `schema/README.md`), and set `sql_DATABASE_URL` in `.env.local`. The app uses `lib/db.ts` for server-side queries.
+**Database (Neon):** To use interview codes, transcripts, or admin features, create a Neon project, run `schema/001_initial.sql` once (see `schema/README.md`), and set `sql_DATABASE_URL` in `.env.local`. The app uses `lib/db.ts` for server-side queries. Set `ADMIN_SESSION_SECRET` (at least 16 chars) for admin login. Run `npm run seed` to create a seed admin user (login: seed@wvsupply.local / changeme) and test interview codes.
 
 ### Install and Run
 

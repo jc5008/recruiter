@@ -8,9 +8,11 @@
 
 require('dotenv').config({ path: process.env.dotenv_config_path || '.env.local' });
 const { neon } = require('@neondatabase/serverless');
+const bcrypt = require('bcryptjs');
 
 const sql = neon(process.env.sql_DATABASE_URL);
 const SEED_EMAIL = 'seed@wvsupply.local';
+const SEED_PASSWORD = 'changeme'; // change after first login
 
 const INTERVIEW_CODES = [
   'TEST-2026',
@@ -22,18 +24,24 @@ const INTERVIEW_CODES = [
 ];
 
 async function ensureUserAndRequisition(userIdRef, reqIdRef) {
-  let users = await sql`SELECT id FROM users WHERE email = ${SEED_EMAIL} LIMIT 1`;
+  let users = await sql`SELECT id, password_hash FROM users WHERE email = ${SEED_EMAIL} LIMIT 1`;
   if (users.length > 0) {
     userIdRef.current = users[0].id;
     console.log('Using existing seed user:', userIdRef.current);
+    if (users[0].password_hash === 'seed-placeholder') {
+      const passwordHash = await bcrypt.hash(SEED_PASSWORD, 10);
+      await sql`UPDATE users SET password_hash = ${passwordHash} WHERE email = ${SEED_EMAIL}`;
+      console.log('Updated seed user password (login:', SEED_EMAIL, '/', SEED_PASSWORD, ')');
+    }
   } else {
+    const passwordHash = await bcrypt.hash(SEED_PASSWORD, 10);
     const inserted = await sql`
       INSERT INTO users (email, password_hash, first_name, last_name, role, status)
-      VALUES (${SEED_EMAIL}, 'seed-placeholder', 'Seed', 'User', 'ADMIN', 'ACTIVE')
+      VALUES (${SEED_EMAIL}, ${passwordHash}, 'Seed', 'User', 'ADMIN', 'ACTIVE')
       RETURNING id
     `;
     userIdRef.current = inserted[0].id;
-    console.log('Created seed user:', userIdRef.current);
+    console.log('Created seed user:', userIdRef.current, '(login:', SEED_EMAIL, '/', SEED_PASSWORD, ')');
   }
 
   let reqs = await sql`SELECT id FROM requisitions LIMIT 1`;
