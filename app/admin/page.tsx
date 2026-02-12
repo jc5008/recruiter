@@ -1,6 +1,12 @@
 import Link from 'next/link';
+import { getSessionFromRequest } from '@/lib/auth';
+import { headers } from 'next/headers';
 
-export default function AdminDashboardPage() {
+export default async function AdminDashboardPage() {
+  const headersList = await headers();
+  const session = await getSessionFromRequest(headersList.get('cookie'));
+  const isSuperAdmin = session?.role === 'SUPER_ADMIN';
+
   return (
     <div className="max-w-2xl">
       <h1 className="text-xl font-semibold mb-2">Admin dashboard</h1>
@@ -24,6 +30,22 @@ export default function AdminDashboardPage() {
             <span className="block text-sm sub-text mt-1">Watch active interviews with TTS playback.</span>
           </Link>
         </li>
+        {isSuperAdmin && (
+          <>
+            <li>
+              <Link href="/admin/users" className="block p-4 rounded-lg border border-black/08 hover:bg-black/04 transition" style={{ background: 'var(--card-bg)' }}>
+                <span className="font-medium">User management</span>
+                <span className="block text-sm sub-text mt-1">List, add, edit, and deactivate admin users. Super Admin only.</span>
+              </Link>
+            </li>
+            <li>
+              <Link href="/admin/settings" className="block p-4 rounded-lg border border-black/08 hover:bg-black/04 transition" style={{ background: 'var(--card-bg)' }}>
+                <span className="font-medium">System settings</span>
+                <span className="block text-sm sub-text mt-1">Standard Instruction Preface for AI analysis. Super Admin only.</span>
+              </Link>
+            </li>
+          </>
+        )}
       </ul>
     </div>
   );

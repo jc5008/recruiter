@@ -2,9 +2,9 @@ import { NextResponse } from 'next/server';
 import { getSql } from '@/lib/db';
 
 /**
- * Mark the interview session as started (set started_at).
+ * Mark the interview session as started (set started_at and status = ACTIVE).
  * Only updates if started_at is not already set (first start).
- * Used for 30-minute reuse window (2.3).
+ * Used for 30-minute reuse window (2.3). ACTIVE status is required for Live Sessions list.
  */
 export async function POST(
   _request: Request,
@@ -19,7 +19,7 @@ export async function POST(
     const sql = getSql();
     await sql`
       UPDATE interviews
-      SET started_at = NOW()
+      SET started_at = NOW(), status = 'ACTIVE'
       WHERE id = ${interviewId}
         AND started_at IS NULL
     `;

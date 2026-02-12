@@ -64,6 +64,10 @@ export default function InterviewPage() {
   const TWELVE_MIN_SEC = 720;
   const FOURTEEN_MIN_SEC = 840;
 
+  // Prevent double-click on Start Interview (avoids duplicate LiveAvatar connection / echo)
+  const [isStarting, setIsStarting] = useState(false);
+  const startInProgressRef = useRef(false);
+
   // Gate: require valid interview_id from sessionStorage (set after code validation)
   useEffect(() => {
     const id = typeof window !== 'undefined' ? sessionStorage.getItem(INTERVIEW_ID_KEY) : null;
@@ -187,6 +191,9 @@ export default function InterviewPage() {
   }, [streamReady, session]);
 
   const startSession = async () => {
+    if (startInProgressRef.current) return;
+    startInProgressRef.current = true;
+    setIsStarting(true);
     setStatus('Initializing...');
     setTranscripts([]);
     setStreamReady(false);
@@ -242,6 +249,9 @@ export default function InterviewPage() {
     } catch (error: unknown) {
       addDebug('Error: ' + (error instanceof Error ? error.message : String(error)));
       setStatus('Failed');
+    } finally {
+      startInProgressRef.current = false;
+      setIsStarting(false);
     }
   };
 
@@ -510,7 +520,14 @@ export default function InterviewPage() {
           </div>
           <div className="mt-6 flex gap-3">
             {!session && (
-              <button type="button" onClick={startSession} className="btn btn-primary">Start Interview</button>
+              <button
+                type="button"
+                onClick={startSession}
+                disabled={isStarting}
+                className="btn btn-primary disabled:opacity-60 disabled:pointer-events-none"
+              >
+                {isStarting ? 'Connecting…' : 'Start Interview'}
+              </button>
             )}
           </div>
         </div>

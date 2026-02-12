@@ -30,14 +30,17 @@ async function ensureUserAndRequisition(userIdRef, reqIdRef) {
     console.log('Using existing seed user:', userIdRef.current);
     if (users[0].password_hash === 'seed-placeholder') {
       const passwordHash = await bcrypt.hash(SEED_PASSWORD, 10);
-      await sql`UPDATE users SET password_hash = ${passwordHash} WHERE email = ${SEED_EMAIL}`;
+      await sql`UPDATE users SET password_hash = ${passwordHash}, role = 'SUPER_ADMIN' WHERE email = ${SEED_EMAIL}`;
       console.log('Updated seed user password (login:', SEED_EMAIL, '/', SEED_PASSWORD, ')');
+    } else {
+      await sql`UPDATE users SET role = 'SUPER_ADMIN' WHERE email = ${SEED_EMAIL}`;
+      console.log('Ensured seed user has role SUPER_ADMIN (Users & Settings in admin).');
     }
   } else {
     const passwordHash = await bcrypt.hash(SEED_PASSWORD, 10);
     const inserted = await sql`
       INSERT INTO users (email, password_hash, first_name, last_name, role, status)
-      VALUES (${SEED_EMAIL}, ${passwordHash}, 'Seed', 'User', 'ADMIN', 'ACTIVE')
+      VALUES (${SEED_EMAIL}, ${passwordHash}, 'Seed', 'User', 'SUPER_ADMIN', 'ACTIVE')
       RETURNING id
     `;
     userIdRef.current = inserted[0].id;

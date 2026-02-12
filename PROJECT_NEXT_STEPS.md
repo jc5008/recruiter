@@ -160,6 +160,8 @@ This document interprets the **Virtual Interviewer Project Description** (Feb 8,
 - **Persistence:** Mark segments as `is_processed_for_tts`; optionally store generated audio in `observation_audio` for audit/replay.
 - **Next steps:** Real-time feed of transcript (e.g. polling or WebSocket from `transcript_segments` or HeyGen/LiveKit); TTS service (e.g. OpenAI TTS, ElevenLabs); queue and playback in browser; observer count so backend only runs TTS when count > 0.
 
+**Deferred — Live Sessions / sandbox avatar:** If Live Sessions (list or observation) still do not behave as expected after the start-API fix (setting `status = 'ACTIVE'` when the candidate starts the interview), we will hold off on further debugging until the app is switched from the HeyGen **sandbox** avatar to the production avatar identified in `.env.local` (e.g. `NEXT_PUBLIC_AVATAR_ID`). Resolve any remaining Live Session issues after that switch (see Phase 8).
+
 ---
 
 ## Phase 6: Post-Interview Analysis & Reports

@@ -9,8 +9,6 @@ type Requisition = {
   job_title: string;
   status: string;
   job_requirements: string | null;
-  qualifications: string | null;
-  skills: string | null;
   created_at: string;
 };
 
@@ -25,8 +23,6 @@ export default function AdminRequisitionsPage() {
     req_number: '',
     job_title: '',
     job_requirements: '',
-    qualifications: '',
-    skills: '',
   });
 
   function load() {
@@ -56,8 +52,6 @@ export default function AdminRequisitionsPage() {
           req_number: createForm.req_number.trim(),
           job_title: createForm.job_title.trim(),
           job_requirements: createForm.job_requirements.trim() || undefined,
-          qualifications: createForm.qualifications.trim() || undefined,
-          skills: createForm.skills.trim() || undefined,
         }),
       });
       const data = await res.json();
@@ -66,7 +60,7 @@ export default function AdminRequisitionsPage() {
         return;
       }
       setShowCreate(false);
-      setCreateForm({ req_number: '', job_title: '', job_requirements: '', qualifications: '', skills: '' });
+      setCreateForm({ req_number: '', job_title: '', job_requirements: '' });
       load();
     } catch {
       setError('Request failed');
@@ -135,22 +129,6 @@ export default function AdminRequisitionsPage() {
                 value={createForm.job_requirements}
                 onChange={(e) => setCreateForm((f) => ({ ...f, job_requirements: e.target.value }))}
                 className="w-full px-3 py-2 rounded-lg border border-black/12 bg-[var(--bg-color)] min-h-[80px]"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-1">Qualifications</label>
-              <textarea
-                value={createForm.qualifications}
-                onChange={(e) => setCreateForm((f) => ({ ...f, qualifications: e.target.value }))}
-                className="w-full px-3 py-2 rounded-lg border border-black/12 bg-[var(--bg-color)] min-h-[60px]"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-1">Skills</label>
-              <textarea
-                value={createForm.skills}
-                onChange={(e) => setCreateForm((f) => ({ ...f, skills: e.target.value }))}
-                className="w-full px-3 py-2 rounded-lg border border-black/12 bg-[var(--bg-color)] min-h-[60px]"
               />
             </div>
             <div className="flex gap-2">

@@ -16,7 +16,7 @@ export default async function AdminLayout({
       <header className="sticky top-0 z-40 border-b border-black/08 flex items-center justify-between px-4 py-3" style={{ background: 'var(--card-bg)' }}>
         <div className="flex items-center gap-6">
           <Link href="/admin" className="font-semibold">Admin | WV Supply</Link>
-          {session && <AdminNav />}
+          {session && <AdminNav role={session.role} />}
         </div>
         {session && (
           <div className="flex items-center gap-3">
