@@ -9,8 +9,11 @@ type Requisition = {
   job_title: string;
   status: string;
   job_requirements: string | null;
+  liveavatar_context_id: string | null;
   created_at: string;
 };
+
+type LiveAvatarContext = { id: string; name: string };
 
 export default function AdminRequisitionsPage() {
   const [requisitions, setRequisitions] = useState<Requisition[]>([]);
@@ -19,10 +22,13 @@ export default function AdminRequisitionsPage() {
   const [submitting, setSubmitting] = useState(false);
   const [deactivating, setDeactivating] = useState<string | null>(null);
   const [error, setError] = useState('');
+  const [contexts, setContexts] = useState<LiveAvatarContext[]>([]);
+  const [contextsLoading, setContextsLoading] = useState(false);
   const [createForm, setCreateForm] = useState({
     req_number: '',
     job_title: '',
     job_requirements: '',
+    liveavatar_context_id: '',
   });
 
   function load() {
@@ -40,6 +46,18 @@ export default function AdminRequisitionsPage() {
     load();
   }, []);
 
+  useEffect(() => {
+    if (!showCreate) return;
+    setContextsLoading(true);
+    fetch('/api/admin/liveavatar/contexts')
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.contexts && Array.isArray(data.contexts)) setContexts(data.contexts);
+      })
+      .catch(() => setContexts([]))
+      .finally(() => setContextsLoading(false));
+  }, [showCreate]);
+
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
     setError('');
@@ -52,6 +70,7 @@ export default function AdminRequisitionsPage() {
           req_number: createForm.req_number.trim(),
           job_title: createForm.job_title.trim(),
           job_requirements: createForm.job_requirements.trim() || undefined,
+          liveavatar_context_id: createForm.liveavatar_context_id.trim() || undefined,
         }),
       });
       const data = await res.json();
@@ -60,7 +79,7 @@ export default function AdminRequisitionsPage() {
         return;
       }
       setShowCreate(false);
-      setCreateForm({ req_number: '', job_title: '', job_requirements: '' });
+      setCreateForm({ req_number: '', job_title: '', job_requirements: '', liveavatar_context_id: '' });
       load();
     } catch {
       setError('Request failed');
@@ -130,6 +149,23 @@ export default function AdminRequisitionsPage() {
                 onChange={(e) => setCreateForm((f) => ({ ...f, job_requirements: e.target.value }))}
                 className="w-full px-3 py-2 rounded-lg border border-black/12 bg-[var(--bg-color)] min-h-[80px]"
               />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">LiveAvatar context (avatar persona for this job)</label>
+              <select
+                value={createForm.liveavatar_context_id}
+                onChange={(e) => setCreateForm((f) => ({ ...f, liveavatar_context_id: e.target.value }))}
+                className="w-full px-3 py-2 rounded-lg border border-black/12 bg-[var(--bg-color)]"
+                disabled={contextsLoading}
+              >
+                <option value="">None (use default)</option>
+                {contexts.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+              {contextsLoading && <p className="text-xs sub-text mt-1">Loading contexts…</p>}
             </div>
             <div className="flex gap-2">
               <button type="submit" disabled={submitting} className="btn btn-primary">

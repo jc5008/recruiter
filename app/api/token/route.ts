@@ -1,34 +1,53 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
+import { getSql } from '@/lib/db';
 
-export async function POST() {
+export async function POST(request: NextRequest) {
   const apiKey = process.env.LIVEAVATAR_API_KEY;
-  
+
   // OFFICIAL SANDBOX AVATAR ID (Wayne)
   // You cannot use custom avatars in Sandbox mode
-  const avatarId = "dd73ea75-1218-4ef3-92ce-606d5f7fbc0a"; 
-  
-  const contextId = process.env.NEXT_PUBLIC_CONTEXT_ID;
+  const avatarId = process.env.NEXT_PUBLIC_AVATAR_ID || 'dd73ea75-1218-4ef3-92ce-606d5f7fbc0a';
+
+  let contextId: string | null = process.env.NEXT_PUBLIC_CONTEXT_ID ?? null;
+  try {
+    const body = await request.json().catch(() => ({}));
+    const interviewId = body?.interviewId;
+    if (interviewId && typeof interviewId === 'string') {
+      const sql = getSql();
+      const rows = await sql`
+        SELECT r.liveavatar_context_id
+        FROM interviews i
+        JOIN requisitions r ON r.id = i.requisition_id
+        WHERE i.id = ${interviewId}
+        LIMIT 1
+      `;
+      const r = rows[0] as { liveavatar_context_id: string | null } | undefined;
+      if (r?.liveavatar_context_id) contextId = r.liveavatar_context_id;
+    }
+  } catch {
+    // keep env fallback
+  }
 
   if (!apiKey) {
     return NextResponse.json({ error: 'Missing API Key in .env.local' }, { status: 500 });
   }
 
   try {
+    const body: Record<string, unknown> = {
+      mode: 'FULL',
+      is_sandbox: true,
+      avatar_id: avatarId,
+    };
+    if (contextId) {
+      body.avatar_persona = { context_id: contextId };
+    }
     const response = await fetch('https://api.liveavatar.com/v1/sessions/token', {
       method: 'POST',
       headers: {
         'X-API-KEY': apiKey,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        mode: 'FULL',
-        is_sandbox: true, // Enable Sandbox
-        avatar_id: avatarId,
-        avatar_persona: {
-          // If context_id causes issues in sandbox, try commenting this line out
-          context_id: contextId, 
-        },
-      }),
+      body: JSON.stringify(body),
     });
 
     const data = await response.json();

@@ -10,7 +10,7 @@ export async function GET(request: NextRequest) {
     const status = searchParams.get('status') || 'ACTIVE';
     const sql = getSql();
     const rows = await sql`
-      SELECT r.id, r.req_number, r.job_title, r.status, r.job_requirements, r.created_at
+      SELECT r.id, r.req_number, r.job_title, r.status, r.job_requirements, r.liveavatar_context_id, r.created_at
       FROM requisitions r
       WHERE r.status = ${status}
       ORDER BY r.created_at DESC
@@ -27,15 +27,16 @@ export async function POST(request: NextRequest) {
   if (auth instanceof NextResponse) return auth;
   try {
     const body = await request.json();
-    const { req_number, job_title, job_requirements } = body;
+    const { req_number, job_title, job_requirements, liveavatar_context_id } = body;
     if (!req_number || !job_title) {
       return NextResponse.json({ error: 'req_number and job_title required' }, { status: 400 });
     }
+    const contextId = typeof liveavatar_context_id === 'string' && liveavatar_context_id.trim() ? liveavatar_context_id.trim() : null;
     const sql = getSql();
     const inserted = await sql`
-      INSERT INTO requisitions (req_number, job_title, status, job_requirements, created_by)
-      VALUES (${String(req_number).trim()}, ${String(job_title).trim()}, 'ACTIVE', ${body.job_requirements ?? null}, ${auth.session.userId})
-      RETURNING id, req_number, job_title, status, created_at
+      INSERT INTO requisitions (req_number, job_title, status, job_requirements, liveavatar_context_id, created_by)
+      VALUES (${String(req_number).trim()}, ${String(job_title).trim()}, 'ACTIVE', ${body.job_requirements ?? null}, ${contextId}, ${auth.session.userId})
+      RETURNING id, req_number, job_title, status, liveavatar_context_id, created_at
     `;
     return NextResponse.json(inserted[0]);
   } catch (e) {
