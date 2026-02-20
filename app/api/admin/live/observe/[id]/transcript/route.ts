@@ -25,6 +25,7 @@ export async function GET(
           SELECT id, speaker, content, timestamp_offset_ms, created_at
           FROM transcript_segments
           WHERE interview_id = ${interviewId}
+            AND id != ${afterId}
             AND (created_at > ${afterCreated} OR (created_at = ${afterCreated} AND id > ${afterId}))
           ORDER BY created_at ASC, id ASC
         `;

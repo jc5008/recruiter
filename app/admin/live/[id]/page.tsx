@@ -7,6 +7,10 @@ import { useParams } from 'next/navigation';
 type Segment = { id: string; speaker: string; content: string; timestamp_offset_ms: number | null; created_at: string };
 type Meta = { id: string; candidate_first_name: string; candidate_last_name: string; position_title: string; status: string; started_at: string | null };
 
+function segId(s: Segment): string {
+  return String(s?.id ?? '').trim().toLowerCase();
+}
+
 const POLL_MS = 2000;
 const ENDED_STATUSES = ['COMPLETED', 'EXPIRED', 'FAILED'];
 
@@ -107,7 +111,7 @@ export default function AdminLiveObservationPage() {
           if (!after) {
             setSegments(data.segments);
             displayedIds.clear();
-            data.segments.forEach((s: Segment) => displayedIds.add(s.id));
+            data.segments.forEach((s: Segment) => displayedIds.add(segId(s)));
             const last = data.segments[data.segments.length - 1];
             if (last?.created_at) lastCreatedRef.current = last.created_at;
             if (last?.id) lastIdRef.current = last.id;
@@ -117,12 +121,12 @@ export default function AdminLiveObservationPage() {
             }
             return;
           }
-          const toAdd = data.segments.filter((s: Segment) => !displayedIds.has(s.id));
+          const toAdd = data.segments.filter((s: Segment) => !displayedIds.has(segId(s)));
           if (toAdd.length === 0) return;
-          toAdd.forEach((s: Segment) => displayedIds.add(s.id));
+          toAdd.forEach((s: Segment) => displayedIds.add(segId(s)));
           setSegments((prev) => {
-            const prevIds = new Set(prev.map((p) => p.id));
-            const extra = toAdd.filter((s) => !prevIds.has(s.id));
+            const prevIds = new Set(prev.map((p) => segId(p)));
+            const extra = toAdd.filter((s) => !prevIds.has(segId(s)));
             if (extra.length === 0) return prev;
             return [...prev, ...extra];
           });
