@@ -8,6 +8,7 @@ type Segment = { id: string; speaker: string; content: string; timestamp_offset_
 type Meta = { id: string; candidate_first_name: string; candidate_last_name: string; position_title: string; status: string; started_at: string | null };
 
 const POLL_MS = 2000;
+const ENDED_STATUSES = ['COMPLETED', 'EXPIRED', 'FAILED'];
 
 export default function AdminLiveObservationPage() {
   const params = useParams();
@@ -21,10 +22,12 @@ export default function AdminLiveObservationPage() {
   const [ttsVolume, setTtsVolume] = useState(1);
   const lastCreatedRef = useRef<string | null>(null);
   const lastIdRef = useRef<string | null>(null);
-  const seenSegmentIdsRef = useRef<Set<string>>(new Set());
+  const displayedSegmentIdsRef = useRef<Set<string>>(new Set());
   const queueRef = useRef<Segment[]>([]);
   const speakingRef = useRef(false);
   const synthRef = useRef<SpeechSynthesis | null>(null);
+  const sessionEndedRef = useRef(false);
+  const transcriptIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const speakNext = useCallback(() => {
     if (speakingRef.current || queueRef.current.length === 0 || ttsPaused || ttsMuted) return;
@@ -62,7 +65,10 @@ export default function AdminLiveObservationPage() {
       .then((r) => r.json())
       .then((data) => {
         if (data.error) setError(data.error);
-        else setMeta(data);
+        else {
+          setMeta(data);
+          sessionEndedRef.current = ENDED_STATUSES.includes(data.status);
+        }
       })
       .catch(() => setError('Failed to load'))
       .finally(() => setLoading(false));
@@ -70,7 +76,25 @@ export default function AdminLiveObservationPage() {
 
   useEffect(() => {
     if (!id) return;
+    let pollCount = 0;
+    function pollMeta() {
+      fetch(`/api/admin/live/observe/${id}/meta`)
+        .then((r) => r.json())
+        .then((data) => {
+          if (data?.status && ENDED_STATUSES.includes(data.status)) {
+            sessionEndedRef.current = true;
+            if (transcriptIntervalRef.current) {
+              clearInterval(transcriptIntervalRef.current);
+              transcriptIntervalRef.current = null;
+            }
+          }
+        })
+        .catch(() => {});
+    }
     function poll() {
+      if (sessionEndedRef.current && lastCreatedRef.current !== null) return;
+      pollCount += 1;
+      if (pollCount > 1 && pollCount % 3 === 0) pollMeta();
       const after = lastCreatedRef.current;
       const afterId = lastIdRef.current;
       const params = after ? `?after=${encodeURIComponent(after)}${afterId ? `&after_id=${encodeURIComponent(afterId)}` : ''}` : '';
@@ -79,32 +103,44 @@ export default function AdminLiveObservationPage() {
         .then((r) => r.json())
         .then((data) => {
           if (!data.segments || !Array.isArray(data.segments)) return;
+          const displayedIds = displayedSegmentIdsRef.current;
           if (!after) {
             setSegments(data.segments);
-            const seen = new Set<string>();
-            data.segments.forEach((s: Segment) => seen.add(s.id));
-            seenSegmentIdsRef.current = seen;
+            displayedIds.clear();
+            data.segments.forEach((s: Segment) => displayedIds.add(s.id));
             const last = data.segments[data.segments.length - 1];
             if (last?.created_at) lastCreatedRef.current = last.created_at;
             if (last?.id) lastIdRef.current = last.id;
-          } else if (data.segments.length > 0) {
-            const seen = seenSegmentIdsRef.current;
-            const newSegments = data.segments.filter((s: Segment) => !seen.has(s.id));
-            if (newSegments.length === 0) return;
-            newSegments.forEach((s: Segment) => seen.add(s.id));
-            setSegments((prev) => [...prev, ...newSegments]);
-            const last = data.segments[data.segments.length - 1];
-            if (last?.created_at) lastCreatedRef.current = last.created_at;
-            if (last?.id) lastIdRef.current = last.id;
-            newSegments.forEach((s: Segment) => queueRef.current.push(s));
-            speakNext();
+            if (sessionEndedRef.current && transcriptIntervalRef.current) {
+              clearInterval(transcriptIntervalRef.current);
+              transcriptIntervalRef.current = null;
+            }
+            return;
           }
+          const toAdd = data.segments.filter((s: Segment) => !displayedIds.has(s.id));
+          if (toAdd.length === 0) return;
+          toAdd.forEach((s: Segment) => displayedIds.add(s.id));
+          setSegments((prev) => {
+            const prevIds = new Set(prev.map((p) => p.id));
+            const extra = toAdd.filter((s) => !prevIds.has(s.id));
+            if (extra.length === 0) return prev;
+            return [...prev, ...extra];
+          });
+          const lastAdded = toAdd[toAdd.length - 1];
+          if (lastAdded?.created_at) lastCreatedRef.current = lastAdded.created_at;
+          if (lastAdded?.id) lastIdRef.current = lastAdded.id;
+          toAdd.forEach((s: Segment) => queueRef.current.push(s));
+          speakNext();
         })
         .catch(() => {});
     }
     poll();
     const t = setInterval(poll, POLL_MS);
-    return () => clearInterval(t);
+    transcriptIntervalRef.current = t;
+    return () => {
+      clearInterval(t);
+      transcriptIntervalRef.current = null;
+    };
   }, [id, speakNext]);
 
   useEffect(() => {
