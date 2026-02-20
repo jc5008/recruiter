@@ -5,11 +5,14 @@ import Link from 'next/link';
 
 export default function AdminSettingsPage() {
   const [value, setValue] = useState('');
+  const [reportEmail, setReportEmail] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [savingEmail, setSavingEmail] = useState(false);
   const [error, setError] = useState('');
   const [role, setRole] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  const [savedEmail, setSavedEmail] = useState(false);
 
   useEffect(() => {
     fetch('/api/auth/session')
@@ -23,11 +26,15 @@ export default function AdminSettingsPage() {
       setLoading(false);
       return;
     }
-    fetch('/api/admin/settings/instruction-preface')
-      .then((r) => r.json())
-      .then((data) => {
-        if (data.error && data.error.includes('Forbidden')) return;
-        setValue(data.value ?? '');
+    Promise.all([
+      fetch('/api/admin/settings/instruction-preface').then((r) => r.json()),
+      fetch('/api/admin/settings/report-delivery-email').then((r) => r.json()),
+    ])
+      .then(([prefaceData, emailData]) => {
+        if (prefaceData.error && prefaceData.error.includes('Forbidden')) return;
+        setValue(prefaceData.value ?? '');
+        if (emailData.error && emailData.error.includes('Forbidden')) return;
+        setReportEmail(emailData.value ?? '');
       })
       .catch(() => {})
       .finally(() => setLoading(false));
@@ -55,6 +62,31 @@ export default function AdminSettingsPage() {
       setError('Request failed');
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleSaveReportEmail(e: React.FormEvent) {
+    e.preventDefault();
+    setError('');
+    setSavingEmail(true);
+    setSavedEmail(false);
+    try {
+      const res = await fetch('/api/admin/settings/report-delivery-email', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ value: reportEmail }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || 'Failed to save');
+        return;
+      }
+      setSavedEmail(true);
+      setTimeout(() => setSavedEmail(false), 3000);
+    } catch {
+      setError('Request failed');
+    } finally {
+      setSavingEmail(false);
     }
   }
 
@@ -93,6 +125,27 @@ export default function AdminSettingsPage() {
             {saving ? 'Saving…' : 'Save'}
           </button>
           {saved && <span className="text-sm text-green-600">Saved.</span>}
+        </div>
+      </form>
+
+      <form onSubmit={handleSaveReportEmail} className="mt-8 space-y-4">
+        <div>
+          <label className="block text-sm font-medium mb-1">Report delivery email (Phase 6.3)</label>
+          <p className="sub-text text-xs mb-2">Email address that receives the post-interview screening report. Saved to <code className="bg-[var(--bg-color)] px-1 rounded">system_settings</code> (<code>report_delivery_email</code>). Used when sending the report via Resend.</p>
+          <input
+            type="email"
+            value={reportEmail}
+            onChange={(e) => setReportEmail(e.target.value)}
+            className="w-full px-3 py-2 rounded-lg border border-black/12 bg-[var(--bg-color)] font-mono text-sm"
+            placeholder="e.g. hr.automations@wvsupply.com"
+            disabled={loading}
+          />
+        </div>
+        <div className="flex gap-2">
+          <button type="submit" disabled={savingEmail || loading} className="btn btn-primary">
+            {savingEmail ? 'Saving…' : 'Save'}
+          </button>
+          {savedEmail && <span className="text-sm text-green-600">Saved.</span>}
         </div>
       </form>
 

@@ -193,11 +193,11 @@ This document interprets the **Virtual Interviewer Project Description** (Feb 8,
 - **Input:** Assembled “content package” (e.g. system instruction preface from `system_settings`, job requirements, transcript, resume).
 - **Output:** One big Markdown blob. Model responds with JSON only: `{"report_markdown": "<full report in Markdown>"}`. Store in `interview_reports.ai_evaluation_json`: `{ "report_markdown", "model", "finished_at" }`; set `token_usage_input` / `token_usage_output`. Report sections: Title; Candidate & role; Overview; Question analysis; Competencies; System observations; Recommendation. Full spec: **`docs/phase-6-2-ai-evaluation-spec.md`**. Retry on transient failures.
 
-### 6.3 Report Generation and Delivery [❌ INCOMPLETE]
+### 6.3 Report Generation and Delivery [✅ COMPLETE]
 
-- **PDF:** Generate standardized Post-Interview Report (candidate/role metadata, duration, token usage, overview, question analysis, competency evaluations, system observations); version/archive.
-- **Email:** Send report to **hr.automations@wvsupply.com**; update `email_delivery_status`; log failures and alert admins.
-- **Next steps:** Server-side job or API that: loads interview + transcript + requisition; calls GPT-4o; builds PDF (e.g. React-PDF, Puppeteer, or server-side lib); sends email; writes to `interview_reports`.
+- **Report:** A single PDF is generated and sent as an email attachment. PDF content order: (1) AI Evaluation (as currently formatted), (2) Candidate Resume (cleanly formatted), (3) Transcript (cleanly formatted). Generated with Puppeteer from HTML.
+- **Email:** Sent via Resend to the address configured in **Admin → Settings** (Report delivery email). Requires `RESEND_API_KEY` and `RESEND_FROM_EMAIL` (or `RESEND_FROM`). Updates `interview_reports.email_delivery_status` to SENT or FAILED; failures are logged to console.
+- **API:** `POST /api/interviews/[id]/deliver` sends the report; Developer page has “Deliver report (email)” for Super Admin. Run evaluation (6.2) first so report content exists.
 
 ---
 
@@ -211,10 +211,10 @@ This document interprets the **Virtual Interviewer Project Description** (Feb 8,
 - **Audit:** Log creation, role changes, deactivations, failed access; filter/export for authorized users.
 - **Next steps:** Admin UI for user CRUD; enforce “Super Admin only”; integrate with auth provider or `users` table; audit writes to `audit_logs`.
 
-### 7.2 Super Admin: Instruction Preface [🔄 PARTIAL]
+### 7.2 Super Admin: Instruction Preface & Report Delivery Email [🔄 PARTIAL]
 
-- **System Settings → Standard Instruction Preface:** Editable text used as the system instruction for AI analysis. Save to `system_settings`; apply to all future analyses (no retroactive). ✅ Settings page exists (`/admin/settings`); instruction preface API exists; needs UI form.
-- **Next steps:** Single settings page; load/save `system_settings.key = 'instruction_preface'`; use this value when calling GPT-4o in Phase 6.
+- **System Settings → Standard Instruction Preface:** Editable text used as the system instruction for AI analysis. Save to `system_settings`; apply to all future analyses (no retroactive). ✅ Settings page exists (`/admin/settings`); instruction preface API exists; UI form in place.
+- **System Settings → Report delivery email (Phase 6.3):** Recipient for post-interview screening reports sent via Resend. Stored as `system_settings.report_delivery_email`. ✅ Field on `/admin/settings`; load/save via `/api/admin/settings/report-delivery-email`.
 
 ### 7.3 Secure Access Across Platform [❌ INCOMPLETE]
 

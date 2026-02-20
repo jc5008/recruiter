@@ -19,6 +19,7 @@ export default function AdminDeveloperPage() {
   const [loading, setLoading] = useState(true);
   const [compiling, setCompiling] = useState(false);
   const [evaluating, setEvaluating] = useState(false);
+  const [delivering, setDelivering] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [role, setRole] = useState<string | null>(null);
@@ -121,6 +122,41 @@ export default function AdminDeveloperPage() {
     }
   }
 
+  async function handleDeliver() {
+    if (!selectedInterviewId) {
+      setError('Please select a candidate');
+      return;
+    }
+
+    setError('');
+    setSuccess('');
+    setDelivering(true);
+
+    try {
+      const res = await fetch('/api/admin/developer/deliver', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ interviewId: selectedInterviewId }),
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.error || 'Failed to deliver report');
+        return;
+      }
+
+      setSuccess(
+        `Report sent for ${data.interview_id}.${data.message_id ? ` Message ID: ${data.message_id}` : ''}`
+      );
+      setTimeout(() => setSuccess(''), 5000);
+    } catch (err) {
+      setError('Request failed');
+      console.error(err);
+    } finally {
+      setDelivering(false);
+    }
+  }
+
   if (role !== 'SUPER_ADMIN' && role !== null) {
     return (
       <div className="max-w-2xl">
@@ -141,7 +177,7 @@ export default function AdminDeveloperPage() {
     <div className="max-w-2xl">
       <h1 className="text-xl font-semibold mb-2">Developer tools</h1>
       <p className="sub-text text-sm mb-4">
-        Compile aggregated reports (6.1) and run AI evaluation (6.2) for testing and debugging. Compile triggers the same process as when a candidate clicks "Leave Interview". Run evaluation calls OpenAI to generate the screening report (requires aggregated prompt first).
+        Compile aggregated reports (6.1), run AI evaluation (6.2), and deliver report by email (6.3). Compile triggers the same process as when a candidate clicks "Leave Interview". Run evaluation calls OpenAI to generate the screening report (requires aggregated prompt first). Deliver sends the report to the email configured in Admin → Settings via Resend.
       </p>
 
       {loading ? (
@@ -154,7 +190,7 @@ export default function AdminDeveloperPage() {
               value={selectedInterviewId}
               onChange={(e) => setSelectedInterviewId(e.target.value)}
               className="w-full px-3 py-2 rounded-lg border border-black/12 bg-[var(--bg-color)]"
-              disabled={compiling || evaluating}
+              disabled={compiling || evaluating || delivering}
             >
               <option value="">-- Select a candidate --</option>
               {interviews.map((interview) => (
@@ -187,18 +223,26 @@ export default function AdminDeveloperPage() {
           <div className="flex flex-wrap gap-3">
             <button
               onClick={handleCompile}
-              disabled={!selectedInterviewId || compiling || evaluating}
+              disabled={!selectedInterviewId || compiling || evaluating || delivering}
               className="btn btn-primary"
             >
               {compiling ? 'Compiling...' : 'Compile Aggregated Report'}
             </button>
             <button
               onClick={handleRunEvaluation}
-              disabled={!selectedInterviewId || compiling || evaluating}
+              disabled={!selectedInterviewId || compiling || evaluating || delivering}
               className="btn btn-primary"
               title="Send aggregated prompt to OpenAI and save the screening report"
             >
               {evaluating ? 'Running evaluation...' : 'Trigger evaluation to OpenAI'}
+            </button>
+            <button
+              onClick={handleDeliver}
+              disabled={!selectedInterviewId || compiling || evaluating || delivering}
+              className="btn btn-primary"
+              title="Send screening report to configured email via Resend (Phase 6.3)"
+            >
+              {delivering ? 'Sending...' : 'Deliver report (email)'}
             </button>
           </div>
 
