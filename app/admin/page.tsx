@@ -44,6 +44,12 @@ export default async function AdminDashboardPage() {
                 <span className="block text-sm sub-text mt-1">Standard Instruction Preface for AI analysis. Super Admin only.</span>
               </Link>
             </li>
+            <li>
+              <Link href="/admin/developer" className="block p-4 rounded-lg border border-black/08 hover:bg-black/04 transition" style={{ background: 'var(--card-bg)' }}>
+                <span className="font-medium">Developer tools</span>
+                <span className="block text-sm sub-text mt-1">Compile aggregated reports for testing and debugging. Super Admin only.</span>
+              </Link>
+            </li>
           </>
         )}
       </ul>

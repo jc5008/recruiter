@@ -44,11 +44,6 @@ export async function POST(
       status: string;
     };
 
-    // Don't allow completing if already completed
-    if (interview.status === 'COMPLETED') {
-      return NextResponse.json({ error: 'Interview already completed' }, { status: 400 });
-    }
-
     // Calculate duration if started_at exists
     const now = new Date();
     const startedAt = interview.started_at ? new Date(interview.started_at) : null;
@@ -57,35 +52,68 @@ export async function POST(
         ? Math.floor((now.getTime() - startedAt.getTime()) / 1000)
         : null;
 
-    // Update interview status
-    await sql`
-      UPDATE interviews
-      SET 
-        status = 'COMPLETED',
-        ended_at = ${now},
-        duration_seconds = ${durationSeconds}
-      WHERE id = ${interviewId}
-    `;
+    // Update interview status (only if not already completed)
+    if (interview.status !== 'COMPLETED') {
+      await sql`
+        UPDATE interviews
+        SET 
+          status = 'COMPLETED',
+          ended_at = ${now},
+          duration_seconds = ${durationSeconds}
+        WHERE id = ${interviewId}
+      `;
+    } else if (!interview.ended_at) {
+      // If already completed but missing ended_at, update it
+      await sql`
+        UPDATE interviews
+        SET 
+          ended_at = ${now},
+          duration_seconds = ${durationSeconds}
+        WHERE id = ${interviewId}
+      `;
+    }
 
     // Aggregate all data for AI evaluation
-    const aggregatedData = await aggregateInterviewData(interviewId);
-    const aggregatedPrompt = buildAggregatedPrompt(aggregatedData);
+    let aggregatedData;
+    let aggregatedPrompt;
+    try {
+      aggregatedData = await aggregateInterviewData(interviewId);
+      aggregatedPrompt = buildAggregatedPrompt(aggregatedData);
+    } catch (aggErr) {
+      console.error('Failed to aggregate interview data:', aggErr);
+      return NextResponse.json(
+        { error: `Failed to aggregate data: ${aggErr instanceof Error ? aggErr.message : 'Unknown error'}` },
+        { status: 500 }
+      );
+    }
 
     // Create or update interview_reports row with aggregated prompt
-    await sql`
-      INSERT INTO interview_reports (
-        interview_id,
-        aggregated_prompt_text,
-        email_delivery_status
-      )
-      VALUES (
-        ${interviewId},
-        ${aggregatedPrompt},
-        'PENDING'
-      )
-      ON CONFLICT (interview_id) DO UPDATE SET
-        aggregated_prompt_text = ${aggregatedPrompt}
-    `;
+    try {
+      await sql`
+        INSERT INTO interview_reports (
+          interview_id,
+          aggregated_prompt_text,
+          email_delivery_status
+        )
+        VALUES (
+          ${interviewId},
+          ${aggregatedPrompt},
+          'PENDING'
+        )
+        ON CONFLICT (interview_id) DO UPDATE SET
+          aggregated_prompt_text = ${aggregatedPrompt}
+      `;
+    } catch (insertErr) {
+      console.error('Failed to insert/update interview_reports:', insertErr);
+      // Check if column exists (migration might not have been run)
+      if (insertErr instanceof Error && insertErr.message.includes('aggregated_prompt_text')) {
+        return NextResponse.json(
+          { error: 'Database migration required: Run migration 004 to add aggregated_prompt_text column' },
+          { status: 500 }
+        );
+      }
+      throw insertErr;
+    }
 
     return NextResponse.json({
       ok: true,
