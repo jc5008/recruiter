@@ -4,7 +4,7 @@ A Next.js web application that delivers a **virtual interview** experience for W
 
 ---
 
-## Overview.
+## Overview
 
 - **Purpose:** Let candidates complete an interview by talking to an AI interviewer avatar in the browser.
 - **Stack:** Next.js 16 (App Router), React 19, TypeScript, Tailwind CSS 4.

@@ -102,7 +102,7 @@ export default function AdminLiveObservationPage() {
       const after = lastCreatedRef.current;
       const afterId = lastIdRef.current;
       const params = after ? `?after=${encodeURIComponent(after)}${afterId ? `&after_id=${encodeURIComponent(afterId)}` : ''}` : '';
-      const url = `/api/admin/live/observe/${id}/transcript${params}`;
+      const url = `/api/admin/live/observe/${id}/transcript${params}${params ? '&' : '?'}_t=${Date.now()}`;
       fetch(url)
         .then((r) => r.json())
         .then((data) => {

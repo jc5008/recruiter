@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSql } from '@/lib/db';
 import { requireAdmin } from '@/lib/admin-auth';
 
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 /** Poll transcript segments for an interview (for live observation). */
 export async function GET(
   request: NextRequest,
@@ -45,7 +48,9 @@ export async function GET(
         ORDER BY created_at ASC, id ASC
       `;
     }
-    return NextResponse.json({ segments: rows });
+    const res = NextResponse.json({ segments: rows });
+    res.headers.set('Cache-Control', 'private, no-store, no-cache, must-revalidate, max-age=0');
+    return res;
   } catch (e) {
     console.error('Transcript poll error:', e);
     return NextResponse.json({ error: 'Failed to fetch transcript' }, { status: 500 });
