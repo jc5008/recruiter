@@ -16,21 +16,32 @@ export async function GET(
   try {
     const { searchParams } = new URL(request.url);
     const afterCreated = searchParams.get('after'); // optional: ISO created_at of last segment for incremental fetch
+    const afterId = searchParams.get('after_id'); // optional: id of last segment (avoids duplicates when created_at ties)
     const sql = getSql();
     let rows: { id: string; speaker: string; content: string; timestamp_offset_ms: number | null; created_at: string }[];
     if (afterCreated) {
-      rows = await sql`
-        SELECT id, speaker, content, timestamp_offset_ms, created_at
-        FROM transcript_segments
-        WHERE interview_id = ${interviewId} AND created_at > ${afterCreated}
-        ORDER BY created_at ASC
-      `;
+      if (afterId) {
+        rows = await sql`
+          SELECT id, speaker, content, timestamp_offset_ms, created_at
+          FROM transcript_segments
+          WHERE interview_id = ${interviewId}
+            AND (created_at > ${afterCreated} OR (created_at = ${afterCreated} AND id > ${afterId}))
+          ORDER BY created_at ASC, id ASC
+        `;
+      } else {
+        rows = await sql`
+          SELECT id, speaker, content, timestamp_offset_ms, created_at
+          FROM transcript_segments
+          WHERE interview_id = ${interviewId} AND created_at > ${afterCreated}
+          ORDER BY created_at ASC, id ASC
+        `;
+      }
     } else {
       rows = await sql`
         SELECT id, speaker, content, timestamp_offset_ms, created_at
         FROM transcript_segments
         WHERE interview_id = ${interviewId}
-        ORDER BY created_at ASC
+        ORDER BY created_at ASC, id ASC
       `;
     }
     return NextResponse.json({ segments: rows });

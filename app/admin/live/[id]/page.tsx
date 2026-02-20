@@ -20,6 +20,8 @@ export default function AdminLiveObservationPage() {
   const [ttsMuted, setTtsMuted] = useState(false);
   const [ttsVolume, setTtsVolume] = useState(1);
   const lastCreatedRef = useRef<string | null>(null);
+  const lastIdRef = useRef<string | null>(null);
+  const seenSegmentIdsRef = useRef<Set<string>>(new Set());
   const queueRef = useRef<Segment[]>([]);
   const speakingRef = useRef(false);
   const synthRef = useRef<SpeechSynthesis | null>(null);
@@ -70,20 +72,31 @@ export default function AdminLiveObservationPage() {
     if (!id) return;
     function poll() {
       const after = lastCreatedRef.current;
-      const url = after ? `/api/admin/live/observe/${id}/transcript?after=${encodeURIComponent(after)}` : `/api/admin/live/observe/${id}/transcript`;
+      const afterId = lastIdRef.current;
+      const params = after ? `?after=${encodeURIComponent(after)}${afterId ? `&after_id=${encodeURIComponent(afterId)}` : ''}` : '';
+      const url = `/api/admin/live/observe/${id}/transcript${params}`;
       fetch(url)
         .then((r) => r.json())
         .then((data) => {
           if (!data.segments || !Array.isArray(data.segments)) return;
           if (!after) {
             setSegments(data.segments);
+            const seen = new Set<string>();
+            data.segments.forEach((s: Segment) => seen.add(s.id));
+            seenSegmentIdsRef.current = seen;
             const last = data.segments[data.segments.length - 1];
             if (last?.created_at) lastCreatedRef.current = last.created_at;
+            if (last?.id) lastIdRef.current = last.id;
           } else if (data.segments.length > 0) {
-            setSegments((prev) => [...prev, ...data.segments]);
+            const seen = seenSegmentIdsRef.current;
+            const newSegments = data.segments.filter((s: Segment) => !seen.has(s.id));
+            if (newSegments.length === 0) return;
+            newSegments.forEach((s: Segment) => seen.add(s.id));
+            setSegments((prev) => [...prev, ...newSegments]);
             const last = data.segments[data.segments.length - 1];
             if (last?.created_at) lastCreatedRef.current = last.created_at;
-            data.segments.forEach((s: Segment) => queueRef.current.push(s));
+            if (last?.id) lastIdRef.current = last.id;
+            newSegments.forEach((s: Segment) => queueRef.current.push(s));
             speakNext();
           }
         })
