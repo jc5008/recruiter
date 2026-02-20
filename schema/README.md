@@ -1,4 +1,5 @@
 # Database Schema (Neon).
+ver1.1
 
 Schema for the Virtual Interviewer app, aligned with the Project Description (Feb 2026).
 
