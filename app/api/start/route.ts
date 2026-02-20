@@ -11,8 +11,6 @@ export async function POST() {
   const apiKey = process.env.LIVEAVATAR_API_KEY;
   const sandboxMode = process.env.LIVEAVATAR_SANDBOX_MODE?.toUpperCase() === 'YES';
   const avatarId = sandboxMode ? SANDBOX_AVATAR_ID : (process.env.NEXT_PUBLIC_AVATAR_ID || SANDBOX_AVATAR_ID);
-  const contextId = process.env.NEXT_PUBLIC_CONTEXT_ID;
-
   if (!apiKey) {
     return NextResponse.json({ error: 'Missing API Key in .env.local' }, { status: 500 });
   }
@@ -28,7 +26,7 @@ export async function POST() {
         mode: 'FULL',
         is_sandbox: sandboxMode,
         avatar_id: avatarId,
-        avatar_persona: contextId ? { context_id: contextId } : {},
+        avatar_persona: {},
       }),
     });
 

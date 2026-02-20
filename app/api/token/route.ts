@@ -10,7 +10,7 @@ export async function POST(request: NextRequest) {
   const avatarId = sandboxMode ? SANDBOX_AVATAR_ID : (process.env.NEXT_PUBLIC_AVATAR_ID || SANDBOX_AVATAR_ID);
   const isSandbox = sandboxMode;
 
-  let contextId: string | null = process.env.NEXT_PUBLIC_CONTEXT_ID ?? null;
+  let contextId: string | null = null;
   try {
     const body = await request.json().catch(() => ({}));
     const interviewId = body?.interviewId;

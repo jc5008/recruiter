@@ -11,7 +11,7 @@ This document interprets the **Virtual Interviewer Project Description** (Feb 8,
 - **Phase 3:** Transcript Persistence ✅ | Countdown ✅
 - **Phase 4:** Admin Auth ✅ | Register Candidate 🔄 | Requisitions ✅
 - **Phase 5:** Live Sessions ✅ | Observation View ✅
-- **Phase 6:** Trigger & Aggregation ✅ | AI Evaluation ❌ | Report Generation ❌
+- **Phase 6:** Trigger & Aggregation ✅ | AI Evaluation ✅ | Report Generation ❌
 - **Phase 7:** User Management 🔄 | Instruction Preface 🔄 | Security ❌
 - **Phase 8:** Production Readiness 🔄
 
@@ -187,11 +187,11 @@ This document interprets the **Virtual Interviewer Project Description** (Feb 8,
 - **Aggregate:** Candidate identity, job title, requisition ID, timestamps, duration, resume (plain text), **full transcript**, system instructions, job requirements (from requisition). ✅ Implemented: `lib/aggregate-interview-data.ts` aggregates all required data.
 - **Store aggregated prompt:** Permanently store the final aggregated prompt (system instructions + job requirements + transcript + resume) used for AI evaluation. This enables development debugging and long-term analysis of evaluation inputs. ✅ Implemented: `aggregated_prompt_text TEXT` column added to `interview_reports` (migration `004_aggregated_prompt.sql`); prompt built via `buildAggregatedPrompt()` and stored on completion.
 
-### 6.2 AI Evaluation [❌ INCOMPLETE]
+### 6.2 AI Evaluation [✅ COMPLETE]
 
 - **Model:** OpenAI GPT-4o via API.
 - **Input:** Assembled “content package” (e.g. system instruction preface from `system_settings`, job requirements, transcript, resume).
-- **Output:** Structured evaluation (e.g. competency scores, question analysis); store in `interview_reports.ai_evaluation_json`; preserve formatting; retry on transient failures.
+- **Output:** One big Markdown blob. Model responds with JSON only: `{"report_markdown": "<full report in Markdown>"}`. Store in `interview_reports.ai_evaluation_json`: `{ "report_markdown", "model", "finished_at" }`; set `token_usage_input` / `token_usage_output`. Report sections: Title; Candidate & role; Overview; Question analysis; Competencies; System observations; Recommendation. Full spec: **`docs/phase-6-2-ai-evaluation-spec.md`**. Retry on transient failures.
 
 ### 6.3 Report Generation and Delivery [❌ INCOMPLETE]
 

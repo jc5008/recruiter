@@ -18,6 +18,7 @@ export default function AdminDeveloperPage() {
   const [selectedInterviewId, setSelectedInterviewId] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [compiling, setCompiling] = useState(false);
+  const [evaluating, setEvaluating] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [role, setRole] = useState<string | null>(null);
@@ -85,6 +86,41 @@ export default function AdminDeveloperPage() {
     }
   }
 
+  async function handleRunEvaluation() {
+    if (!selectedInterviewId) {
+      setError('Please select a candidate');
+      return;
+    }
+
+    setError('');
+    setSuccess('');
+    setEvaluating(true);
+
+    try {
+      const res = await fetch('/api/admin/developer/evaluate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ interviewId: selectedInterviewId }),
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.error || 'Failed to run evaluation');
+        return;
+      }
+
+      setSuccess(
+        `Evaluation completed for ${data.interview_id}. Model: ${data.model}. Tokens: ${data.token_usage_input} in / ${data.token_usage_output} out. Report length: ${data.report_length} chars.`
+      );
+      setTimeout(() => setSuccess(''), 8000);
+    } catch (err) {
+      setError('Request failed');
+      console.error(err);
+    } finally {
+      setEvaluating(false);
+    }
+  }
+
   if (role !== 'SUPER_ADMIN' && role !== null) {
     return (
       <div className="max-w-2xl">
@@ -105,7 +141,7 @@ export default function AdminDeveloperPage() {
     <div className="max-w-2xl">
       <h1 className="text-xl font-semibold mb-2">Developer tools</h1>
       <p className="sub-text text-sm mb-4">
-        Compile aggregated reports for testing and debugging. This triggers the same compilation process that runs when a candidate clicks "Leave Interview". You can re-compile reports to test prompt changes with the same interview data.
+        Compile aggregated reports (6.1) and run AI evaluation (6.2) for testing and debugging. Compile triggers the same process as when a candidate clicks "Leave Interview". Run evaluation calls OpenAI to generate the screening report (requires aggregated prompt first).
       </p>
 
       {loading ? (
@@ -118,7 +154,7 @@ export default function AdminDeveloperPage() {
               value={selectedInterviewId}
               onChange={(e) => setSelectedInterviewId(e.target.value)}
               className="w-full px-3 py-2 rounded-lg border border-black/12 bg-[var(--bg-color)]"
-              disabled={compiling}
+              disabled={compiling || evaluating}
             >
               <option value="">-- Select a candidate --</option>
               {interviews.map((interview) => (
@@ -148,13 +184,21 @@ export default function AdminDeveloperPage() {
             </div>
           )}
 
-          <div>
+          <div className="flex flex-wrap gap-3">
             <button
               onClick={handleCompile}
-              disabled={!selectedInterviewId || compiling}
+              disabled={!selectedInterviewId || compiling || evaluating}
               className="btn btn-primary"
             >
               {compiling ? 'Compiling...' : 'Compile Aggregated Report'}
+            </button>
+            <button
+              onClick={handleRunEvaluation}
+              disabled={!selectedInterviewId || compiling || evaluating}
+              className="btn btn-primary"
+              title="Send aggregated prompt to OpenAI and save the screening report"
+            >
+              {evaluating ? 'Running evaluation...' : 'Trigger evaluation to OpenAI'}
             </button>
           </div>
 

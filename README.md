@@ -51,10 +51,10 @@ A Next.js web application that delivers a **virtual interview** experience for W
 
 | Route           | Method | Purpose |
 |----------------|--------|--------|
-| `/api/token`   | POST   | Requests a Live Avatar **session token** from HeyGen. Uses `LIVEAVATAR_API_KEY`, a fixed sandbox avatar ID (“Wayne”), and optional `NEXT_PUBLIC_CONTEXT_ID` for avatar persona/context. Returns the token (and any wrapper) as returned by the Live Avatar API. |
+| `/api/token`   | POST   | Requests a Live Avatar **session token** from HeyGen. Uses `LIVEAVATAR_API_KEY`, sandbox or production avatar ID, and per-requisition `liveavatar_context_id` when an interview is provided. Returns the token (and any wrapper) as returned by the Live Avatar API. |
 | `/api/start`   | POST   | Gets a token and then calls Live Avatar’s **start** endpoint. Response includes `session_token`, `livekit_url`, and `livekit_client_token` for use with LiveKit or other tooling. The main UI uses `/api/token` only; `/api/start` is available for workflows that need the start response. |
 
-- **Token request:** `POST https://api.liveavatar.com/v1/sessions/token` with `X-API-KEY`, body: `mode: 'FULL'`, `is_sandbox: true`, `avatar_id`, and optional `avatar_persona: { context_id }`.
+- **Token request:** `POST https://api.liveavatar.com/v1/sessions/token` with `X-API-KEY`, body: `mode: 'FULL'`, `is_sandbox`, `avatar_id`, and optional `avatar_persona: { context_id }` from the interview’s requisition.
 - **Start request:** `POST https://api.liveavatar.com/v1/sessions/start` with `Authorization: Bearer <session_token>`.
 
 ### Session & SDK Usage
@@ -87,7 +87,6 @@ Create `.env.local` in the project root:
 | Variable                   | Required | Description |
 |---------------------------|----------|-------------|
 | `LIVEAVATAR_API_KEY`      | Yes      | HeyGen Live Avatar API key. |
-| `NEXT_PUBLIC_CONTEXT_ID`  | No       | Optional context/persona ID passed as `avatar_persona.context_id` when requesting the session token. |
 | `sql_DATABASE_URL`        | No*      | Neon PostgreSQL connection string. Required for interview codes, transcripts, admin, and reports. See `schema/README.md` to run the schema. |
 | `ADMIN_SESSION_SECRET`    | No*      | Secret for signing admin session cookies (at least 16 characters). Required for `/admin` login. |
 
