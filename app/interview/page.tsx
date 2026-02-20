@@ -204,6 +204,14 @@ export default function InterviewPage() {
     shownRemainingRef.current = { five: false, two: false, one: false };
 
     try {
+      // Microphone access requires a secure context (HTTPS or localhost); SDK uses getUserMedia
+      if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
+        const msg =
+          typeof window !== 'undefined' && window.location?.protocol === 'http:' && !window.location?.hostname?.match(/^localhost|127\.0\.0\.1$/)
+            ? 'Microphone access requires a secure connection. Please use HTTPS or open this page from localhost.'
+            : 'Your browser or environment does not support microphone access. Try HTTPS or a different browser.';
+        throw new Error(msg);
+      }
       if (interviewId) {
         await fetch(`/api/interviews/${interviewId}/start`, { method: 'POST' });
       }
@@ -247,8 +255,9 @@ export default function InterviewPage() {
       setSession(newSession);
       setStatus('Waiting for avatar stream...');
     } catch (error: unknown) {
-      addDebug('Error: ' + (error instanceof Error ? error.message : String(error)));
-      setStatus('Failed');
+      const message = error instanceof Error ? error.message : String(error);
+      addDebug('Error: ' + message);
+      setStatus(message.startsWith('Microphone') || message.startsWith('Your browser') ? message : 'Failed');
     } finally {
       startInProgressRef.current = false;
       setIsStarting(false);

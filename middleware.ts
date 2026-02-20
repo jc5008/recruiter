@@ -7,7 +7,7 @@ export async function middleware(request: NextRequest) {
   if (!pathname.startsWith('/admin')) {
     return NextResponse.next();
   }
-  if (pathname === '/admin/login') {
+  if (pathname === '/admin/login' || pathname === '/admin/forgot-password' || pathname === '/admin/reset-password') {
     return NextResponse.next();
   }
   try {
