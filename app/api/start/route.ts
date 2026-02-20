@@ -5,9 +5,12 @@ import { NextResponse } from 'next/server';
  * livekit_url and livekit_client_token for the LiveKit connection tester
  * and meet URL (see https://docs.liveavatar.com/docs/quick-start-guide step 3).
  */
+const SANDBOX_AVATAR_ID = 'dd73ea75-1218-4ef3-92ce-606d5f7fbc0a';
+
 export async function POST() {
   const apiKey = process.env.LIVEAVATAR_API_KEY;
-  const avatarId = 'dd73ea75-1218-4ef3-92ce-606d5f7fbc0a';
+  const sandboxMode = process.env.LIVEAVATAR_SANDBOX_MODE?.toUpperCase() === 'YES';
+  const avatarId = sandboxMode ? SANDBOX_AVATAR_ID : (process.env.NEXT_PUBLIC_AVATAR_ID || SANDBOX_AVATAR_ID);
   const contextId = process.env.NEXT_PUBLIC_CONTEXT_ID;
 
   if (!apiKey) {
@@ -23,7 +26,7 @@ export async function POST() {
       },
       body: JSON.stringify({
         mode: 'FULL',
-        is_sandbox: true,
+        is_sandbox: sandboxMode,
         avatar_id: avatarId,
         avatar_persona: contextId ? { context_id: contextId } : {},
       }),

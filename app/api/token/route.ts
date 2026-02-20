@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSql } from '@/lib/db';
 
+const SANDBOX_AVATAR_ID = 'dd73ea75-1218-4ef3-92ce-606d5f7fbc0a'; // Wayne — https://docs.liveavatar.com/docs/developing-in-sandbox-mode
+
 export async function POST(request: NextRequest) {
   const apiKey = process.env.LIVEAVATAR_API_KEY;
 
-  // OFFICIAL SANDBOX AVATAR ID (Wayne)
-  // You cannot use custom avatars in Sandbox mode
-  const avatarId = process.env.NEXT_PUBLIC_AVATAR_ID || 'dd73ea75-1218-4ef3-92ce-606d5f7fbc0a';
+  const sandboxMode = process.env.LIVEAVATAR_SANDBOX_MODE?.toUpperCase() === 'YES';
+  const avatarId = sandboxMode ? SANDBOX_AVATAR_ID : (process.env.NEXT_PUBLIC_AVATAR_ID || SANDBOX_AVATAR_ID);
+  const isSandbox = sandboxMode;
 
   let contextId: string | null = process.env.NEXT_PUBLIC_CONTEXT_ID ?? null;
   try {
@@ -35,7 +37,7 @@ export async function POST(request: NextRequest) {
   try {
     const body: Record<string, unknown> = {
       mode: 'FULL',
-      is_sandbox: true,
+      is_sandbox: isSandbox,
       avatar_id: avatarId,
     };
     if (contextId) {

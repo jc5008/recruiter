@@ -527,7 +527,9 @@ export default function InterviewPage() {
             <video ref={videoRef} autoPlay playsInline className="w-full h-full object-cover" />
             {!streamActive && (
               <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/50 z-10">
-                <span className="text-lg font-medium text-white/90">{status}</span>
+                <span className="text-xl font-medium text-white/90">
+                  {status === 'Idle' ? "Click the Start Interview button when you're ready." : status}
+                </span>
               </div>
             )}
           </div>
@@ -615,7 +617,9 @@ export default function InterviewPage() {
       )}
 
       <footer className="flex items-center px-5 py-4 border-t border-black/06 shrink-0" style={{ background: 'var(--card-bg)' }}>
-        <button type="button" onClick={stopSession} className="btn btn-danger" disabled={!session}>Leave Interview</button>
+        {session && (
+          <button type="button" onClick={stopSession} className="btn btn-danger">Leave Interview</button>
+        )}
       </footer>
 
       {/* 3.2 Time-remaining notification (5 / 2 / 1 min) */}
