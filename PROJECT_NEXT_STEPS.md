@@ -2,6 +2,19 @@
 
 This document interprets the **Virtual Interviewer Project Description** (Feb 8, 2026) and turns it into ordered next steps. It assumes the **current build**: single-page virtual interview with HeyGen Live Avatar, live transcript, audio device test popup, Settings/Help, and Diagnostics.
 
+## Status Summary
+
+**Legend:** ✅ COMPLETE | 🔄 IN PROGRESS / PARTIAL | ❌ INCOMPLETE
+
+- **Phase 1:** Database ✅ | Code Lifecycle 🔄 | Entry Flow ❌
+- **Phase 2:** Orientation ❌ | Audio Check 🔄 | Session Reuse ❌ | Thank You ❌ | Privacy ❌
+- **Phase 3:** Transcript Persistence ✅ | Countdown ✅
+- **Phase 4:** Admin Auth ✅ | Register Candidate 🔄 | Requisitions ✅
+- **Phase 5:** Live Sessions ✅ | Observation View ✅
+- **Phase 6:** Trigger & Aggregation ✅ | AI Evaluation ❌ | Report Generation ❌
+- **Phase 7:** User Management 🔄 | Instruction Preface 🔄 | Security ❌
+- **Phase 8:** Production Readiness 🔄
+
 ---
 
 ## Summary: What’s New vs. Current Build
@@ -22,7 +35,7 @@ This document interprets the **Virtual Interviewer Project Description** (Feb 8,
 
 **Goal:** Persistent data and secure, code-gated candidate access so the rest of the system can rely on it.
 
-### 1.1 Database Setup
+### 1.1 Database Setup [✅ COMPLETE]
 
 - **Stack:** Doc specifies Vercel + Neon (direct integration). **Done in repo:** `@neondatabase/serverless`, `lib/db.ts`, `schema/001_initial.sql`, `schema/README.md`.
 - **Schema:** Full SQL is in `schema/001_initial.sql` (in order):
@@ -35,9 +48,9 @@ This document interprets the **Virtual Interviewer Project Description** (Feb 8,
   7. **Audit & config:** `audit_logs`, `system_settings`
 - **Next steps:** Create a Neon project, run `schema/001_initial.sql` once (see `schema/README.md`), set `sql_DATABASE_URL` in `.env.local`, then add API routes or Server Actions that use `getSql()` from `lib/db.ts` for interviews and codes.
 
-### 1.2 Interview Code Lifecycle
+### 1.2 Interview Code Lifecycle [🔄 IN PROGRESS]
 
-- **Generate:** Unique `access_code` when HR registers a candidate; store with `interviews` row and `deadline_at`.
+- **Generate:** Unique `access_code` when HR registers a candidate; store with `interviews` row and `deadline_at`. ✅ Code generation exists in seed/dev scripts.
 - **Validate:** Candidate-facing endpoint/page: accept code, check exists + active + not expired + not already “used” per policy (e.g. allow reuse within 30‑min window).
 - **Session code behavior (from doc):**
   - Reuse same code within 30‑min window of first start.
@@ -57,7 +70,7 @@ This document interprets the **Virtual Interviewer Project Description** (Feb 8,
 
 **Goal:** Match the doc’s candidate journey: orientation → audio check → interview → thank you.
 
-### 2.1 Orientation & Flow Order
+### 2.1 Orientation & Flow Order [❌ INCOMPLETE]
 
 - **Order (doc):** “Watch the video → Test the Audio → Enter the interview code.”  
   **Clarification for implementation:** Code is entered on the **welcome** screen (before orientation). After code validation, show **orientation** then **audio check** then **Start Interview**.
@@ -67,25 +80,25 @@ This document interprets the **Virtual Interviewer Project Description** (Feb 8,
   - Actions: Restart video, “Start Interview” when ready.
 - **Next steps:** Add `/orientation` (or equivalent) with video player and script-based content; after “Start Interview” go to current interview page (with session tied to validated `interview_id`).
 
-### 2.2 Audio Check and Code
+### 2.2 Audio Check and Code [🔄 PARTIAL]
 
-- **Current:** Audio test popup on load (speaker + mic).
+- **Current:** Audio test popup on load (speaker + mic). ✅ Audio test exists in Settings; needs reordering in flow.
 - **Change:** Show audio test **after** code validation and orientation, before “Start Interview” (so flow is: code → orientation → audio check → start). Keep “Test audio devices” in Settings for later use.
 - **Optional:** Use selected mic/speaker (from Settings) when creating HeyGen session (doc notes this as a possible follow-up).
 
-### 2.3 Session Reuse and Transcript Append
+### 2.3 Session Reuse and Transcript Append [❌ INCOMPLETE]
 
 - **30‑minute window:** If the same interview code is used again within 30 minutes of first start, treat as same “session” (e.g. same `interview_id`); allow re-entry to live interview or resume flow.
 - **Transcript:** When same code is used again, **append** new transcript segments to the existing transcript for that `interview_id` (don’t replace).
 - **Next steps:** When creating/joining session, check for existing `interview_id` and recent `started_at`; if within window, reuse and append transcript; otherwise create new session/segment set.
 
-### 2.4 Thank You Page
+### 2.4 Thank You Page [❌ INCOMPLETE]
 
 - **When:** After candidate clicks “Leave Interview,” end session then **redirect to Thank You page**.
 - **Content:** Completion confirmation, next steps, contact info.
 - **Next steps:** Add route (e.g. `/thank-you`) and redirect from “Leave Interview” handler; optionally pass `interview_id` for “Your interview has been submitted” messaging.
 
-### 2.5 Privacy and Metadata
+### 2.5 Privacy and Metadata [❌ INCOMPLETE]
 
 - **Privacy:** Add privacy disclosure on site (doc: “Add privacy disclosure on site”).
 - **Metadata:** Update `layout.tsx` (e.g. title “Virtual Interview | WV Supply”, description) as in current README notes.
@@ -96,13 +109,13 @@ This document interprets the **Virtual Interviewer Project Description** (Feb 8,
 
 **Goal:** Save transcript for analysis and observation; add time cues for candidate.
 
-### 3.1 Persist Transcript
+### 3.1 Persist Transcript [✅ COMPLETE]
 
-- **Current:** Transcript only in React state; lost on refresh/leave.
+- **Current:** Transcript only in React state; lost on refresh/leave. ✅ Implemented: segments saved to `transcript_segments` via `/api/interviews/[id]/transcript` with debouncing.
 - **Target:** On each `user.transcription` / `avatar.transcription` (and any segment boundaries), persist to `transcript_segments` with `interview_id`, `speaker`, `content`, `timestamp_offset_ms`.
 - **Next steps:** After session is tied to `interview_id`, send segments to API that writes to `transcript_segments`; consider batching or debouncing to limit writes.
 
-### 3.2 Countdown / Time Remaining
+### 3.2 Countdown / Time Remaining [✅ COMPLETE]
 
 - **Doc:** “15 minutes” target; progress bar “extremely subtle” first 10 min, “more obvious” last 5 min.
 - **Notifications:** At 10 min → “5 minutes remaining”; at 12 min → “2 minutes remaining”; at 14 min → “1 minute remaining.”
@@ -114,22 +127,22 @@ This document interprets the **Virtual Interviewer Project Description** (Feb 8,
 
 **Goal:** Secure admin app for HR staff: login, register candidates, manage requisitions.
 
-### 4.1 Admin App and Auth
+### 4.1 Admin App and Auth [✅ COMPLETE]
 
 - **Scope:** Separate “Admin web page” (e.g. `/admin` or subdomain) with login.
 - **Auth:** Employee credentials; roles from schema: `SUPER_ADMIN`, `ADMIN`, `OBSERVER`, `AUDITOR`.
 - **Security (high level):** Rate limiting and lockout on login; audit log for attempts (see Phase 7).
 - **Next steps:** Add admin layout/routes; choose auth (e.g. NextAuth, Clerk, or custom with `users` table); implement login and role checks.
 
-### 4.2 Register New Candidate (HR)
+### 4.2 Register New Candidate (HR) [🔄 PARTIAL]
 
-- **Form (required):** Candidate First Name, Last Name, Job Title (from approved list/requisitions), Candidate Email, Interview Access Deadline (default 5 days from today, editable), Resume (plain text), Registrant Name (pre-filled from logged-in user; editable only by Super Admin).
+- **Form (required):** Candidate First Name, Last Name, Job Title (from approved list/requisitions), Candidate Email, Interview Access Deadline (default 5 days from today, editable), Resume (plain text), Registrant Name (pre-filled from logged-in user; editable only by Super Admin). ✅ Basic registration exists (`/admin/register`); needs deadline field, confirmation screen, email.
 - **Submit:** Validate required fields, email format, deadline in future, job title authorized. Then create `interviews` row, generate unique `access_code`, timestamp, log.
 - **Confirmation screen:** Candidate name, job title, deadline, **Interview Code**, **Copy to Clipboard** button with brief “Copied” feedback.
 - **Email:** Send confirmation to **hr.automations@wvsupply.com** (and optionally invitation to candidate).
 - **Next steps:** Admin page “Register New Candidate”; form → API/server action → DB + code generation + email (e.g. Resend, SendGrid); confirmation UI with clipboard API.
 
-### 4.3 Job Requisitions (HR)
+### 4.3 Job Requisitions (HR) [✅ COMPLETE]
 
 - **Create Requisition:** Job Requisition Number (unique), Post Date, Job Title, Job Requirements, Qualifications, Skills (content for AI prompts). Save to `requisitions`; status Active; show in “Active Requisitions.”
 - **Integration:** Job Title and Requisition Number available in candidate registration (dropdown); job requirements used later for AI interview context and evaluation.
@@ -142,15 +155,15 @@ This document interprets the **Virtual Interviewer Project Description** (Feb 8,
 
 **Goal:** HR can watch live sessions and hear a TTS-recreated version of the conversation only while observing.
 
-### 5.1 View Live Sessions
+### 5.1 View Live Sessions [✅ COMPLETE]
 
 - **Menu:** “View Live Sessions” in admin.
 - **List:** Active interviews: Candidate First/Last Name, Position Title, Session Status (Active / Paused / Ending), Observer Count.
 - **Select session:** Open Live Observation View.
 
-### 5.2 Live Observation View
+### 5.2 Live Observation View [✅ COMPLETE]
 
-- **Content:** Real-time transcript, session metadata, audio playback controls (pause, resume, volume, mute).
+- **Content:** Real-time transcript, session metadata, audio playback controls (pause, resume, volume, mute). ✅ Implemented: real-time transcript polling, TTS playback (browser SpeechSynthesis), controls, deduplication fixes.
 - **TTS rule:** Only when **at least one** observer is viewing this session:
   - Subscribe to transcript events for that interview (from `transcript_segments` or live stream).
   - For each new segment: identify speaker → send text to TTS → choose voice → add to playback queue; play in order for near–real-time “recreated” conversation.
@@ -168,18 +181,19 @@ This document interprets the **Virtual Interviewer Project Description** (Feb 8,
 
 **Goal:** When an interview is completed, run AI evaluation and email a PDF report.
 
-### 6.1 Trigger and Data Aggregation
+### 6.1 Trigger and Data Aggregation [✅ COMPLETE]
 
-- **Trigger:** When session ends (candidate leaves), mark interview completed and kick off processing (e.g. queue job or serverless).
-- **Aggregate:** Candidate identity, job title, requisition ID, timestamps, duration, resume (plain text), **full transcript**, system instructions, job requirements (from requisition).
+- **Trigger:** When session ends (candidate leaves), mark interview completed and kick off processing (e.g. queue job or serverless). ✅ Implemented: `/api/interviews/[id]/complete` endpoint called from `stopSession()`.
+- **Aggregate:** Candidate identity, job title, requisition ID, timestamps, duration, resume (plain text), **full transcript**, system instructions, job requirements (from requisition). ✅ Implemented: `lib/aggregate-interview-data.ts` aggregates all required data.
+- **Store aggregated prompt:** Permanently store the final aggregated prompt (system instructions + job requirements + transcript + resume) used for AI evaluation. This enables development debugging and long-term analysis of evaluation inputs. ✅ Implemented: `aggregated_prompt_text TEXT` column added to `interview_reports` (migration `004_aggregated_prompt.sql`); prompt built via `buildAggregatedPrompt()` and stored on completion.
 
-### 6.2 AI Evaluation
+### 6.2 AI Evaluation [❌ INCOMPLETE]
 
 - **Model:** OpenAI GPT-4o via API.
 - **Input:** Assembled “content package” (e.g. system instruction preface from `system_settings`, job requirements, transcript, resume).
 - **Output:** Structured evaluation (e.g. competency scores, question analysis); store in `interview_reports.ai_evaluation_json`; preserve formatting; retry on transient failures.
 
-### 6.3 Report Generation and Delivery
+### 6.3 Report Generation and Delivery [❌ INCOMPLETE]
 
 - **PDF:** Generate standardized Post-Interview Report (candidate/role metadata, duration, token usage, overview, question analysis, competency evaluations, system observations); version/archive.
 - **Email:** Send report to **hr.automations@wvsupply.com**; update `email_delivery_status`; log failures and alert admins.
@@ -191,20 +205,20 @@ This document interprets the **Virtual Interviewer Project Description** (Feb 8,
 
 **Goal:** Super Admin can manage users and system text; platform-wide security and audit.
 
-### 7.1 Super Admin: User Management
+### 7.1 Super Admin: User Management [🔄 PARTIAL]
 
-- **User Management:** List/search admins (name, username/email, role, status, last login). Add user (name, email, role, scope, notes); send secure onboarding/temp credentials. Edit user (role, scope, contact, status). Deactivate user (confirm; revoke access, preserve history).
+- **User Management:** List/search admins (name, username/email, role, status, last login). Add user (name, email, role, scope, notes); send secure onboarding/temp credentials. Edit user (role, scope, contact, status). Deactivate user (confirm; revoke access, preserve history). ✅ Basic user list and deactivate exist (`/admin/users`); needs full CRUD, add/edit forms.
 - **Audit:** Log creation, role changes, deactivations, failed access; filter/export for authorized users.
 - **Next steps:** Admin UI for user CRUD; enforce “Super Admin only”; integrate with auth provider or `users` table; audit writes to `audit_logs`.
 
-### 7.2 Super Admin: Instruction Preface
+### 7.2 Super Admin: Instruction Preface [🔄 PARTIAL]
 
-- **System Settings → Standard Instruction Preface:** Editable text used as the system instruction for AI analysis. Save to `system_settings`; apply to all future analyses (no retroactive).
+- **System Settings → Standard Instruction Preface:** Editable text used as the system instruction for AI analysis. Save to `system_settings`; apply to all future analyses (no retroactive). ✅ Settings page exists (`/admin/settings`); instruction preface API exists; needs UI form.
 - **Next steps:** Single settings page; load/save `system_settings.key = 'instruction_preface'`; use this value when calling GPT-4o in Phase 6.
 
-### 7.3 Secure Access Across Platform
+### 7.3 Secure Access Across Platform [❌ INCOMPLETE]
 
-- **Scope:** Interview code submission, admin login, session creation, webhooks, internal tools.
+- **Scope:** Interview code submission, admin login, session creation, webhooks, internal tools. ✅ Basic admin auth exists; needs rate limiting, lockout, comprehensive audit logging.
 - **Log every attempt:** Identifier (code or username), IP, timestamp, user agent, result (success/failure/blocked).
 - **Rate limits:** Code submissions, login attempts, API/session start; progressive throttling and temporary blocks; no sensitive feedback.
 - **Credential access:** Account lockout; alerts for abnormal patterns.
@@ -213,9 +227,9 @@ This document interprets the **Virtual Interviewer Project Description** (Feb 8,
 
 ---
 
-## Phase 8: Polish & Production Readiness
+## Phase 8: Polish & Production Readiness [🔄 PARTIAL]
 
-- **Sandbox → production:** Switch HeyGen to non-sandbox avatar and secure API keys/env.
+- **Sandbox → production:** Switch HeyGen to non-sandbox avatar and secure API keys/env. ✅ Sandbox mode switch implemented (`LIVEAVATAR_SANDBOX_MODE`); needs production avatar setup and testing.
 - **Wire selected mic/speaker** into HeyGen session if supported by SDK.
 - **Testing:** E2E for candidate flow (code → orientation → audio → interview → thank you) and admin registration → code copy → email.
 - **Documentation:** Update README with admin setup, env vars (DB, auth, TTS, OpenAI, email), and deployment notes.

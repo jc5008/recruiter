@@ -269,8 +269,26 @@ export default function InterviewPage() {
   };
 
   const stopSession = async () => {
+    // Flush any pending transcript segments before completing
     flushPendingTranscript();
+    
+    // Stop the LiveAvatar session
     await session?.stop();
+    
+    // Phase 6.1: Mark interview as completed and aggregate data
+    if (interviewId) {
+      try {
+        await fetch(`/api/interviews/${interviewId}/complete`, {
+          method: 'POST',
+        });
+        // Note: We don't wait for or handle errors here to avoid blocking the user
+        // The completion endpoint will log errors server-side
+      } catch (err) {
+        console.error('Failed to complete interview:', err);
+        // Continue with redirect even if completion API fails
+      }
+    }
+    
     sessionStartTimeRef.current = null;
     setSession(null);
     setStreamActive(false);
