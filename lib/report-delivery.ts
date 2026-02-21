@@ -117,10 +117,15 @@ async function htmlToPdfBuffer(html: string): Promise<Buffer> {
   if (isVercel) {
     const puppeteer = await import('puppeteer-core');
     const chromium = await import('@sparticuz/chromium');
+    // On Vercel the bundled function has no node_modules/@sparticuz/chromium/bin; use remote pack URL.
+    const remotePath = process.env.CHROMIUM_REMOTE_EXEC_PATH;
+    const executablePath = remotePath
+      ? await chromium.default.executablePath(remotePath)
+      : await chromium.default.executablePath();
     browser = await puppeteer.default.launch({
       args: chromium.default.args,
       defaultViewport: chromium.default.defaultViewport,
-      executablePath: await chromium.default.executablePath(),
+      executablePath,
       headless: chromium.default.headless ?? true,
     });
   } else {

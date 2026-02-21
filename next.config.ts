@@ -2,6 +2,8 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   reactStrictMode: false,
+  // Required for PDF generation on Vercel: Chromium is loaded from node_modules, not bundled.
+  serverExternalPackages: ["puppeteer-core", "@sparticuz/chromium"],
   typescript: {
     // !! WARN !!
     // Dangerously allow production builds to successfully complete even if

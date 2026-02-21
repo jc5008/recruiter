@@ -19,17 +19,19 @@ Version alignment: use a Chromium version that matches your Puppeteer major. For
 npm install puppeteer-core@24 @sparticuz/chromium@143
 ```
 
-## 2. Code: use Chromium only on Vercel
+## 2. Code and Next.js config
 
-The app already detects Vercel and launches the right browser:
+The app detects Vercel and uses `puppeteer-core` + `@sparticuz/chromium`. **Next.js** is configured with `serverExternalPackages: ["puppeteer-core", "@sparticuz/chromium"]` so Chromium is loaded from node_modules.
 
-- **Local**: `puppeteer` (full package) and its bundled Chrome.
-- **Vercel**: `puppeteer-core` + `@sparticuz/chromium` (executable path and args from `@sparticuz/chromium`).
+On Vercel, the serverless bundle does **not** include `node_modules/@sparticuz/chromium/bin`, so the app uses a **remote Chromium pack URL** when `CHROMIUM_REMOTE_EXEC_PATH` is set.
 
-No extra config in your code is required if you followed the setup in this repo.
+## 3. Vercel project settings (required for PDF)
 
-## 3. Vercel project settings
-
+- **CHROMIUM_REMOTE_EXEC_PATH** (required for report PDF on Vercel): Set to the Chromium pack URL for your `@sparticuz/chromium` version. Example for v143.0.4:
+  ```
+  https://github.com/Sparticuz/chromium/releases/download/v143.0.4/chromium-v143.0.4-pack.x64.tar
+  ```
+  Add this in Vercel → Project → Settings → Environment Variables (Production and Preview). Without it, PDF generation fails with: *"The input directory .../node_modules/@sparticuz/chromium/bin does not exist"*.
 - **Function timeout**: PDF generation can take 10–30+ seconds. On **Hobby** the limit is 10s; on **Pro** you get 60s (or more). Increase the timeout for the route that runs report delivery (e.g. in Vercel Dashboard → Project → Settings → Functions, or `vercel.json`).
 - **Memory**: Allocate at least **1024 MB** (recommended 1500 MB+) for the function that runs Puppeteer. Set in Vercel Dashboard → Project → Settings → Functions → Memory.
 - **Environment**: Ensure `RESEND_API_KEY`, `RESEND_FROM_EMAIL` (or `RESEND_FROM`), and `sql_DATABASE_URL` are set in the Vercel project. Report recipient is configured in Admin → Settings (`report_delivery_email`).
@@ -63,7 +65,8 @@ Example (adjust path if your deliver API lives elsewhere):
 
 | Issue | What to do |
 |--------|------------|
-| Timeout | Raise function `maxDuration` (Pro plan) and/or `memory`. |
+| **".../node_modules/@sparticuz/chromium/bin does not exist"** | Set **CHROMIUM_REMOTE_EXEC_PATH** in Vercel to the pack URL (see §3). The serverless bundle does not include Chromium's `bin`; the app downloads the pack from the URL at runtime. |
+| Timeout | Raise function `maxDuration` (Pro plan) and/or `memory`. Apply to the **complete** route as well if PDF runs there. |
 | “Could not find Chrome” | Use `puppeteer-core` + `@sparticuz/chromium` in production; ensure `@sparticuz/chromium` is not only in `devDependencies`. |
 | Bundle too large | You’re already using the minimal path (puppeteer-core + @sparticuz/chromium on Vercel). If needed, try `@sparticuz/chromium-min` and host the Chromium pack externally (see [Sparticuz chromium-min](https://github.com/Sparticuz/chromium#-min-package)). |
 | Cold start slow | First request after idle can take 15–30s while Chromium is extracted; subsequent requests are faster. |
