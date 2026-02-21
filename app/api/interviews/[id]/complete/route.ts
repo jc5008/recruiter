@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { getSql } from '@/lib/db';
 import { aggregateInterviewData, buildAggregatedPrompt } from '@/lib/aggregate-interview-data';
+import { runEvaluation } from '@/lib/openai-evaluation';
+import { sendReport } from '@/lib/report-delivery';
 
 /**
  * Phase 6.1: Mark interview as completed and aggregate data for AI evaluation.
@@ -113,6 +115,21 @@ export async function POST(
         );
       }
       throw insertErr;
+    }
+
+    // Phase 6.2 & 6.3: Run AI evaluation then send PDF report (fire after success; don't fail completion)
+    try {
+      const evalResult = await runEvaluation(interviewId);
+      if (evalResult.ok) {
+        const deliverResult = await sendReport(interviewId);
+        if (!deliverResult.ok) {
+          console.error('Post-complete report delivery failed:', deliverResult.error);
+        }
+      } else {
+        console.error('Post-complete evaluation failed:', evalResult.error);
+      }
+    } catch (postErr) {
+      console.error('Post-complete evaluation/delivery error:', postErr);
     }
 
     return NextResponse.json({
