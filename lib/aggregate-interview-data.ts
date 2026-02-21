@@ -29,6 +29,7 @@ export type AggregatedInterviewData = {
     job_requirements: string | null;
     qualifications: string | null;
     skills: string | null;
+    job_analysis_instructions: string | null;
   } | null;
   transcript: Array<{
     speaker: 'USER' | 'AVATAR';
@@ -60,7 +61,8 @@ export async function aggregateInterviewData(interviewId: string): Promise<Aggre
       r.job_title,
       r.job_requirements,
       r.qualifications,
-      r.skills
+      r.skills,
+      r.job_analysis_instructions
     FROM interviews i
     LEFT JOIN requisitions r ON r.id = i.requisition_id
     WHERE i.id = ${interviewId}
@@ -85,6 +87,7 @@ export async function aggregateInterviewData(interviewId: string): Promise<Aggre
     job_requirements: string | null;
     qualifications: string | null;
     skills: string | null;
+    job_analysis_instructions: string | null;
   };
 
   // Fetch transcript segments
@@ -126,6 +129,7 @@ export async function aggregateInterviewData(interviewId: string): Promise<Aggre
           job_requirements: row.job_requirements,
           qualifications: row.qualifications,
           skills: row.skills,
+          job_analysis_instructions: row.job_analysis_instructions,
         }
       : null,
     transcript,
@@ -143,6 +147,11 @@ export function buildAggregatedPrompt(data: AggregatedInterviewData): string {
   // System instruction preface
   if (data.system_instruction_preface.trim()) {
     parts.push(`## System Instructions\n\n${data.system_instruction_preface.trim()}\n`);
+  }
+
+  // Job Analysis Instructions (per-requisition; no header, immediately after System Instructions)
+  if (data.requisition?.job_analysis_instructions?.trim()) {
+    parts.push(`${data.requisition.job_analysis_instructions.trim()}\n`);
   }
 
   // Job information

@@ -9,11 +9,25 @@ type Requisition = {
   job_title: string;
   status: string;
   job_requirements: string | null;
+  qualifications: string | null;
+  skills: string | null;
   liveavatar_context_id: string | null;
+  job_analysis_instructions: string | null;
   created_at: string;
 };
 
 type LiveAvatarContext = { id: string; name: string };
+
+const emptyEditForm = {
+  req_number: '',
+  job_title: '',
+  status: 'ACTIVE',
+  job_requirements: '',
+  qualifications: '',
+  skills: '',
+  liveavatar_context_id: '',
+  job_analysis_instructions: '',
+};
 
 export default function AdminRequisitionsPage() {
   const [requisitions, setRequisitions] = useState<Requisition[]>([]);
@@ -21,6 +35,9 @@ export default function AdminRequisitionsPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [deactivating, setDeactivating] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState(emptyEditForm);
+  const [savingEdit, setSavingEdit] = useState(false);
   const [error, setError] = useState('');
   const [contexts, setContexts] = useState<LiveAvatarContext[]>([]);
   const [contextsLoading, setContextsLoading] = useState(false);
@@ -28,7 +45,10 @@ export default function AdminRequisitionsPage() {
     req_number: '',
     job_title: '',
     job_requirements: '',
+    qualifications: '',
+    skills: '',
     liveavatar_context_id: '',
+    job_analysis_instructions: '',
   });
 
   function load() {
@@ -47,7 +67,7 @@ export default function AdminRequisitionsPage() {
   }, []);
 
   useEffect(() => {
-    if (!showCreate) return;
+    if (!showCreate && !editingId) return;
     setContextsLoading(true);
     fetch('/api/admin/liveavatar/contexts')
       .then((r) => r.json())
@@ -56,7 +76,57 @@ export default function AdminRequisitionsPage() {
       })
       .catch(() => setContexts([]))
       .finally(() => setContextsLoading(false));
-  }, [showCreate]);
+  }, [showCreate, editingId]);
+
+  function openEdit(r: Requisition) {
+    setEditingId(r.id);
+    setEditForm({
+      req_number: r.req_number ?? '',
+      job_title: r.job_title ?? '',
+      status: r.status ?? 'ACTIVE',
+      job_requirements: r.job_requirements ?? '',
+      qualifications: r.qualifications ?? '',
+      skills: r.skills ?? '',
+      liveavatar_context_id: r.liveavatar_context_id ?? '',
+      job_analysis_instructions: r.job_analysis_instructions ?? '',
+    });
+    setError('');
+  }
+
+  async function handleUpdate(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editingId) return;
+    setError('');
+    setSavingEdit(true);
+    try {
+      const res = await fetch(`/api/admin/requisitions/${editingId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          req_number: editForm.req_number.trim(),
+          job_title: editForm.job_title.trim(),
+          status: editForm.status,
+          job_requirements: editForm.job_requirements.trim() || undefined,
+          qualifications: editForm.qualifications.trim() || undefined,
+          skills: editForm.skills.trim() || undefined,
+          liveavatar_context_id: editForm.liveavatar_context_id.trim() || undefined,
+          job_analysis_instructions: editForm.job_analysis_instructions.trim() || undefined,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || 'Failed to update');
+        return;
+      }
+      setEditingId(null);
+      setEditForm(emptyEditForm);
+      load();
+    } catch {
+      setError('Request failed');
+    } finally {
+      setSavingEdit(false);
+    }
+  }
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
@@ -70,7 +140,10 @@ export default function AdminRequisitionsPage() {
           req_number: createForm.req_number.trim(),
           job_title: createForm.job_title.trim(),
           job_requirements: createForm.job_requirements.trim() || undefined,
+          qualifications: createForm.qualifications.trim() || undefined,
+          skills: createForm.skills.trim() || undefined,
           liveavatar_context_id: createForm.liveavatar_context_id.trim() || undefined,
+          job_analysis_instructions: createForm.job_analysis_instructions.trim() || undefined,
         }),
       });
       const data = await res.json();
@@ -79,7 +152,15 @@ export default function AdminRequisitionsPage() {
         return;
       }
       setShowCreate(false);
-      setCreateForm({ req_number: '', job_title: '', job_requirements: '', liveavatar_context_id: '' });
+      setCreateForm({
+        req_number: '',
+        job_title: '',
+        job_requirements: '',
+        qualifications: '',
+        skills: '',
+        liveavatar_context_id: '',
+        job_analysis_instructions: '',
+      });
       load();
     } catch {
       setError('Request failed');
@@ -98,6 +179,10 @@ export default function AdminRequisitionsPage() {
         setError(data.error || 'Failed to deactivate');
         return;
       }
+      if (editingId === id) {
+        setEditingId(null);
+        setEditForm(emptyEditForm);
+      }
       load();
     } catch {
       setError('Request failed');
@@ -105,6 +190,26 @@ export default function AdminRequisitionsPage() {
       setDeactivating(null);
     }
   }
+
+  const contextSelect = (
+    value: string,
+    onChange: (v: string) => void,
+    disabled?: boolean
+  ) => (
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className="w-full px-3 py-2 rounded-lg border border-black/12 bg-[var(--bg-color)]"
+      disabled={disabled}
+    >
+      <option value="">None (use default)</option>
+      {contexts.map((c) => (
+        <option key={c.id} value={c.id}>
+          {c.name}
+        </option>
+      ))}
+    </select>
+  );
 
   return (
     <div className="max-w-3xl">
@@ -114,7 +219,7 @@ export default function AdminRequisitionsPage() {
           Create requisition
         </button>
       </div>
-      <p className="sub-text text-sm mb-4">Active requisitions appear in the candidate registration dropdown. Deactivated ones are hidden; existing interviews are unaffected.</p>
+      <p className="sub-text text-sm mb-4">Active requisitions appear in the candidate registration dropdown. Edit any field below; Job Analysis Instructions are appended to the aggregated prompt (after System Instructions, before Job Information) for AI evaluation.</p>
 
       {showCreate && (
         <div className="mb-6 p-4 rounded-lg border border-black/08" style={{ background: 'var(--card-bg)' }}>
@@ -151,20 +256,34 @@ export default function AdminRequisitionsPage() {
               />
             </div>
             <div>
+              <label className="block text-sm font-medium mb-1">Qualifications</label>
+              <textarea
+                value={createForm.qualifications}
+                onChange={(e) => setCreateForm((f) => ({ ...f, qualifications: e.target.value }))}
+                className="w-full px-3 py-2 rounded-lg border border-black/12 bg-[var(--bg-color)] min-h-[60px]"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">Skills</label>
+              <textarea
+                value={createForm.skills}
+                onChange={(e) => setCreateForm((f) => ({ ...f, skills: e.target.value }))}
+                className="w-full px-3 py-2 rounded-lg border border-black/12 bg-[var(--bg-color)] min-h-[60px]"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">Job Analysis Instructions</label>
+              <p className="sub-text text-xs mb-1">Job-specific prompt text appended to the aggregated prompt after System Instructions (no header), before Job Information. Used for AI evaluation.</p>
+              <textarea
+                value={createForm.job_analysis_instructions}
+                onChange={(e) => setCreateForm((f) => ({ ...f, job_analysis_instructions: e.target.value }))}
+                className="w-full px-3 py-2 rounded-lg border border-black/12 bg-[var(--bg-color)] min-h-[100px]"
+                placeholder="e.g. Focus on safety awareness and attention to detail for this DC role."
+              />
+            </div>
+            <div>
               <label className="block text-sm font-medium mb-1">LiveAvatar context (avatar persona for this job)</label>
-              <select
-                value={createForm.liveavatar_context_id}
-                onChange={(e) => setCreateForm((f) => ({ ...f, liveavatar_context_id: e.target.value }))}
-                className="w-full px-3 py-2 rounded-lg border border-black/12 bg-[var(--bg-color)]"
-                disabled={contextsLoading}
-              >
-                <option value="">None (use default)</option>
-                {contexts.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
+              {contextSelect(createForm.liveavatar_context_id, (v) => setCreateForm((f) => ({ ...f, liveavatar_context_id: v })), contextsLoading)}
               {contextsLoading && <p className="text-xs sub-text mt-1">Loading contexts…</p>}
             </div>
             <div className="flex gap-2">
@@ -188,24 +307,127 @@ export default function AdminRequisitionsPage() {
           {requisitions.map((r) => (
             <li
               key={r.id}
-              className="flex items-center justify-between p-3 rounded-lg border border-black/08"
+              className="rounded-lg border border-black/08 overflow-hidden"
               style={{ background: 'var(--card-bg)' }}
             >
-              <div>
-                <span className="font-medium">{r.job_title}</span>
-                <span className="sub-text text-sm ml-2">({r.req_number})</span>
-                <span className="sub-text text-xs ml-2">{r.status}</span>
-                <p className="sub-text text-xs mt-1">Post date: {new Date(r.created_at).toLocaleDateString()}</p>
-              </div>
-              {r.status === 'ACTIVE' && (
-                <button
-                  type="button"
-                  onClick={() => deactivate(r.id)}
-                  disabled={deactivating === r.id}
-                  className="btn text-sm sub-text hover:text-red-600"
-                >
-                  {deactivating === r.id ? 'Deactivating…' : 'Deactivate'}
-                </button>
+              {editingId === r.id ? (
+                <div className="p-4">
+                  <h3 className="font-semibold mb-3">Edit requisition</h3>
+                  <form onSubmit={handleUpdate} className="space-y-3">
+                    {error && <p className="text-sm text-red-600">{error}</p>}
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Job requisition number *</label>
+                      <input
+                        type="text"
+                        value={editForm.req_number}
+                        onChange={(e) => setEditForm((f) => ({ ...f, req_number: e.target.value }))}
+                        className="w-full px-3 py-2 rounded-lg border border-black/12 bg-[var(--bg-color)]"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Job title *</label>
+                      <input
+                        type="text"
+                        value={editForm.job_title}
+                        onChange={(e) => setEditForm((f) => ({ ...f, job_title: e.target.value }))}
+                        className="w-full px-3 py-2 rounded-lg border border-black/12 bg-[var(--bg-color)]"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Status</label>
+                      <select
+                        value={editForm.status}
+                        onChange={(e) => setEditForm((f) => ({ ...f, status: e.target.value }))}
+                        className="w-full px-3 py-2 rounded-lg border border-black/12 bg-[var(--bg-color)]"
+                      >
+                        <option value="ACTIVE">ACTIVE</option>
+                        <option value="CLOSED">CLOSED</option>
+                        <option value="ON_HOLD">ON_HOLD</option>
+                        <option value="INACTIVE">INACTIVE</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Job requirements</label>
+                      <textarea
+                        value={editForm.job_requirements}
+                        onChange={(e) => setEditForm((f) => ({ ...f, job_requirements: e.target.value }))}
+                        className="w-full px-3 py-2 rounded-lg border border-black/12 bg-[var(--bg-color)] min-h-[80px]"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Qualifications</label>
+                      <textarea
+                        value={editForm.qualifications}
+                        onChange={(e) => setEditForm((f) => ({ ...f, qualifications: e.target.value }))}
+                        className="w-full px-3 py-2 rounded-lg border border-black/12 bg-[var(--bg-color)] min-h-[60px]"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Skills</label>
+                      <textarea
+                        value={editForm.skills}
+                        onChange={(e) => setEditForm((f) => ({ ...f, skills: e.target.value }))}
+                        className="w-full px-3 py-2 rounded-lg border border-black/12 bg-[var(--bg-color)] min-h-[60px]"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-1">Job Analysis Instructions</label>
+                      <p className="sub-text text-xs mb-1">Appended to aggregated prompt after System Instructions (no header), before Job Information.</p>
+                      <textarea
+                        value={editForm.job_analysis_instructions}
+                        onChange={(e) => setEditForm((f) => ({ ...f, job_analysis_instructions: e.target.value }))}
+                        className="w-full px-3 py-2 rounded-lg border border-black/12 bg-[var(--bg-color)] min-h-[100px]"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-1">LiveAvatar context</label>
+                      {contextSelect(editForm.liveavatar_context_id, (v) => setEditForm((f) => ({ ...f, liveavatar_context_id: v })), contextsLoading)}
+                    </div>
+                    <div className="flex gap-2">
+                      <button type="submit" disabled={savingEdit} className="btn btn-primary">
+                        {savingEdit ? 'Saving…' : 'Save'}
+                      </button>
+                      <button type="button" onClick={() => { setEditingId(null); setEditForm(emptyEditForm); setError(''); }} className="btn sub-text">Cancel</button>
+                    </div>
+                  </form>
+                </div>
+              ) : (
+                <>
+                  <div className="flex items-center justify-between p-3">
+                    <div>
+                      <span className="font-medium">{r.job_title}</span>
+                      <span className="sub-text text-sm ml-2">({r.req_number})</span>
+                      <span className="sub-text text-xs ml-2">{r.status}</span>
+                      <p className="sub-text text-xs mt-1">Post date: {new Date(r.created_at).toLocaleDateString()}</p>
+                      {r.job_analysis_instructions && (
+                        <p className="sub-text text-xs mt-1 truncate max-w-md" title={r.job_analysis_instructions}>
+                          Job Analysis: {r.job_analysis_instructions.length > 60 ? `${r.job_analysis_instructions.slice(0, 60)}…` : r.job_analysis_instructions}
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => openEdit(r)}
+                        className="btn text-sm"
+                      >
+                        Edit
+                      </button>
+                      {r.status === 'ACTIVE' && (
+                        <button
+                          type="button"
+                          onClick={() => deactivate(r.id)}
+                          disabled={deactivating === r.id}
+                          className="btn text-sm sub-text hover:text-red-600"
+                        >
+                          {deactivating === r.id ? 'Deactivating…' : 'Deactivate'}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </>
               )}
             </li>
           ))}
