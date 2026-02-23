@@ -13,6 +13,7 @@ type AudioTestStep = 'speaker' | 'speaker-playing' | 'speaker-paused' | 'speaker
 export default function WelcomePage() {
   const router = useRouter();
   const [step, setStep] = useState<WizardStep>('welcome');
+  const [videoAcknowledged, setVideoAcknowledged] = useState(false);
 
   // Code step
   const [code, setCode] = useState('');
@@ -248,28 +249,50 @@ export default function WelcomePage() {
 
       <main className="flex-1 flex flex-col items-center justify-center px-5 py-8">
         <div className="info-card w-full max-w-md p-8 rounded-2xl shadow-md" style={{ background: 'var(--card-bg)', color: 'var(--text-primary)' }}>
-          {/* Step 1: Welcome */}
+          {/* Step 1: Watch the Welcome Video */}
           {step === 'welcome' && (
             <>
-              <h2 className="text-xl font-semibold mb-2">Welcome</h2>
-              <p className="text-sm sub-text mb-4 leading-relaxed">
-                You&apos;ll complete a virtual interview with an AI interviewer. Your conversation will be transcribed for our team. Please use a quiet space and a working microphone.
+              <p className="text-xs sub-text mb-1">Step 1 of 2</p>
+              <h2 className="text-xl font-semibold mb-4">Step 1: Watch the Welcome Video</h2>
+              <p className="text-sm leading-relaxed mb-2" style={{ color: 'var(--text-primary)' }}>
+                Before beginning your virtual interview, please watch the short welcome video below. The video explains how the process works and what to expect.
               </p>
-              <p className="text-xs sub-text mb-4">
-                By continuing, you agree that your audio may be recorded and used for evaluation. See our privacy policy for details.
+              <p className="text-sm font-medium mb-8" style={{ color: 'var(--text-primary)' }}>
+                You must watch the video before proceeding.
               </p>
-              <div className="mb-6 w-full max-w-[700px] mx-auto aspect-video rounded-xl border border-black/08 overflow-hidden bg-black/5">
+
+              <div className="my-10 w-full max-w-[700px] mx-auto aspect-video rounded-xl border border-black/08 overflow-hidden bg-black/5">
                 <video
                   src="/welcome.mp4"
                   controls
                   playsInline
                   className="w-full h-full object-contain"
-                  title="Virtual Interview Preparation"
+                  title="Welcome video"
                 />
               </div>
-              <button type="button" onClick={() => setStep('audio')} className="btn btn-primary w-full">
-                Get started
-              </button>
+              <p className="text-xs sub-text mb-6">Video length: 5 minutes</p>
+
+              <div className="space-y-5">
+                <label className="flex items-start gap-3 cursor-pointer group">
+                  <input
+                    type="checkbox"
+                    checked={videoAcknowledged}
+                    onChange={(e) => setVideoAcknowledged(e.target.checked)}
+                    className="mt-1 rounded border-black/20"
+                  />
+                  <span className="text-sm leading-relaxed" style={{ color: 'var(--text-primary)' }}>
+                    I have watched the full welcome video and am ready to continue.
+                  </span>
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setStep('audio')}
+                  disabled={!videoAcknowledged}
+                  className="btn btn-primary w-full py-2.5 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Continue to Interview
+                </button>
+              </div>
             </>
           )}
 
