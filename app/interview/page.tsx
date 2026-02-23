@@ -54,6 +54,8 @@ export default function InterviewPage() {
   const pendingSegmentsRef = useRef<{ speaker: 'USER' | 'AVATAR'; content: string; timestamp_offset_ms: number }[]>([]);
   const flushTranscriptTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const FLUSH_DEBOUNCE_MS = 800;
+  const completionRequestedRef = useRef(false);
+  const hadActiveSessionRef = useRef(false);
 
   // 3.2 Countdown: 15 min target, progress bar, 5/2/1 min remaining notifications
   const [elapsedSeconds, setElapsedSeconds] = useState<number>(0);
@@ -79,6 +81,19 @@ export default function InterviewPage() {
     setGateReady(true);
   }, [router]);
 
+  // When user closes tab/window or navigates away without clicking Leave Interview, request completion so analysis still runs
+  useEffect(() => {
+    const handleUnload = () => {
+      if (completionRequestedRef.current || !hadActiveSessionRef.current) return;
+      const id = typeof window !== 'undefined' ? sessionStorage.getItem(INTERVIEW_ID_KEY) : null;
+      if (!id) return;
+      completionRequestedRef.current = true;
+      fetch(`/api/interviews/${id}/complete`, { method: 'POST', keepalive: true }).catch(() => {});
+    };
+    window.addEventListener('pagehide', handleUnload);
+    return () => window.removeEventListener('pagehide', handleUnload);
+  }, []);
+
   const addDebug = (msg: string) => {
     console.log(msg);
     setDebugInfo((prev) => prev + '\n' + msg);
@@ -91,20 +106,20 @@ export default function InterviewPage() {
     }
   }, [transcripts]);
 
-  // 3.1 Flush pending transcript segments to API (debounced)
-  const flushPendingTranscript = useCallback(() => {
+  // 3.1 Flush pending transcript segments to API (debounced). Returns a promise so callers can await.
+  const flushPendingTranscript = useCallback((): Promise<void> => {
     if (flushTranscriptTimeoutRef.current) {
       clearTimeout(flushTranscriptTimeoutRef.current);
       flushTranscriptTimeoutRef.current = null;
     }
     const pending = pendingSegmentsRef.current;
-    if (pending.length === 0 || !interviewId) return;
+    if (pending.length === 0 || !interviewId) return Promise.resolve();
     pendingSegmentsRef.current = [];
-    fetch(`/api/interviews/${interviewId}/transcript`, {
+    return fetch(`/api/interviews/${interviewId}/transcript`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ segments: pending }),
-    }).catch(() => {});
+    }).then(() => {}).catch(() => {});
   }, [interviewId]);
 
   const scheduleFlushTranscript = useCallback(() => {
@@ -256,6 +271,7 @@ export default function InterviewPage() {
       });
 
       await newSession.start();
+      hadActiveSessionRef.current = true;
       setSession(newSession);
       setStatus('Waiting for avatar stream...');
     } catch (error: unknown) {
@@ -269,26 +285,17 @@ export default function InterviewPage() {
   };
 
   const stopSession = async () => {
-    // Flush any pending transcript segments before completing
-    flushPendingTranscript();
-    
-    // Stop the LiveAvatar session
+    // Flush any pending transcript segments (await briefly so last segments are saved)
+    const flushPromise = flushPendingTranscript();
     await session?.stop();
-    
-    // Phase 6.1: Mark interview as completed and aggregate data
+    await Promise.race([flushPromise, new Promise((r) => setTimeout(r, 2000))]);
+
+    completionRequestedRef.current = true;
+    // Fire completion in background (aggregation + evaluation + PDF); don't block redirect
     if (interviewId) {
-      try {
-        await fetch(`/api/interviews/${interviewId}/complete`, {
-          method: 'POST',
-        });
-        // Note: We don't wait for or handle errors here to avoid blocking the user
-        // The completion endpoint will log errors server-side
-      } catch (err) {
-        console.error('Failed to complete interview:', err);
-        // Continue with redirect even if completion API fails
-      }
+      fetch(`/api/interviews/${interviewId}/complete`, { method: 'POST', keepalive: true }).catch(() => {});
     }
-    
+
     sessionStartTimeRef.current = null;
     setSession(null);
     setStreamActive(false);
