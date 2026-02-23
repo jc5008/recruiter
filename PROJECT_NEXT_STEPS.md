@@ -25,7 +25,7 @@ This document interprets the **Virtual Interviewer Project Description** (Feb 8,
 | **Session code** | None | Unique code per candidate; validate; 30‑min reuse; transcript append on same code |
 | **Transcript** | In-memory only | Persist to DB; feed post-interview AI and observation |
 | **Admin** | None | **Admin portal**: login, register candidates, requisitions, live observation (TTS), user/requisition/settings management |
-| **Post-interview** | None | **AI evaluation** (OpenAI GPT-4o), **PDF report**, email to hr.automations@wvsupply.com |
+| **Post-interview** | None | **AI evaluation** (OpenAI, default GPT-5 mini), **PDF report**, email to configured address |
 | **Security** | None | Rate limits, lockout, audit logs for codes and admin |
 | **Data** | None | Full **SQL schema** (users, requisitions, interviews, transcripts, reports, audit, system_settings) |
 
@@ -189,7 +189,7 @@ This document interprets the **Virtual Interviewer Project Description** (Feb 8,
 
 ### 6.2 AI Evaluation [✅ COMPLETE]
 
-- **Model:** OpenAI GPT-4o via API.
+- **Model:** OpenAI via API (default: GPT-5 mini; override with OPENAI_SCREENING_MODEL).
 - **Input:** Assembled “content package” (e.g. system instruction preface from `system_settings`, job requirements, transcript, resume).
 - **Output:** One big Markdown blob. Model responds with JSON only: `{"report_markdown": "<full report in Markdown>"}`. Store in `interview_reports.ai_evaluation_json`: `{ "report_markdown", "model", "finished_at" }`; set `token_usage_input` / `token_usage_output`. Report sections: Title; Candidate & role; Overview; Question analysis; Competencies; System observations; Recommendation. Full spec: **`docs/phase-6-2-ai-evaluation-spec.md`**. Retry on transient failures.
 

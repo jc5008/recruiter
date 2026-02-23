@@ -1,6 +1,6 @@
 # Phase 6.2 — AI Evaluation: Response Shape & Prompt Instructions
 
-This document defines the exact **response shape** and **prompt instructions** for the OpenAI GPT-4o evaluation step. The model returns **one big Markdown blob**, stored in `interview_reports.ai_evaluation_json`.
+This document defines the exact **response shape** and **prompt instructions** for the OpenAI evaluation step (default model: GPT-5 mini). The model returns **one big Markdown blob**, stored in `interview_reports.ai_evaluation_json`.
 
 ---
 
@@ -30,13 +30,13 @@ We ask the model to respond with **valid JSON only**, so we can parse it and sto
 ```json
 {
   "report_markdown": "<full Markdown string from the model>",
-  "model": "gpt-4o",
+  "model": "gpt-5-mini",
   "finished_at": "2026-02-19T12:00:00.000Z"
 }
 ```
 
 - **`report_markdown`**: Exactly what the model returned (one big Markdown blob).
-- **`model`**: Model identifier used (e.g. `gpt-4o`). Set by our code after the call.
+- **`model`**: Model identifier used (e.g. `gpt-5-mini`). Set by our code after the call.
 - **`finished_at`**: ISO 8601 timestamp when evaluation completed. Set by our code.
 
 We may later add `token_usage_input`, `token_usage_output` here or keep them only on the table columns.
@@ -239,7 +239,7 @@ The report is one big Markdown blob; the instruction_preface specifies the exact
 
 ## 4. Implementation checklist
 
-- [ ] Call OpenAI API (GPT-4o) with:
+- [ ] Call OpenAI API (e.g. GPT-5 mini) with:
   - System message: optional instruction_preface + fixed system block (including JSON-only and `report_markdown` instructions).
   - User message: full aggregated prompt text.
 - [ ] Parse response as JSON; read `report_markdown`.

@@ -73,7 +73,7 @@ function buildSystemMessage(instructionPreface: string): string {
 
 /**
  * Runs AI evaluation for an interview: loads aggregated prompt and instruction preface,
- * calls OpenAI (model from OPENAI_SCREENING_MODEL or gpt-4o), parses JSON, stores result.
+ * calls OpenAI (model from OPENAI_SCREENING_MODEL or gpt-5-mini), parses JSON, stores result.
  */
 export async function runEvaluation(interviewId: string): Promise<EvaluationResult | EvaluationError> {
   const apiKey = process.env.OPENAI_API_KEY;
@@ -81,7 +81,7 @@ export async function runEvaluation(interviewId: string): Promise<EvaluationResu
     return { ok: false, error: 'OPENAI_API_KEY is not set' };
   }
 
-  const model = process.env.OPENAI_SCREENING_MODEL?.trim() || 'gpt-4o';
+  const model = process.env.OPENAI_SCREENING_MODEL?.trim() || 'gpt-5-mini';
 
   const sql = getSql();
 
