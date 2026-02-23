@@ -29,6 +29,7 @@ export default function InterviewPage() {
   const [showAudioTestPopup, setShowAudioTestPopup] = useState(false);
   const [showSkipConfirm, setShowSkipConfirm] = useState(false);
   const [showTranscriptOverlay, setShowTranscriptOverlay] = useState(false);
+  const [showSpeakPrompt, setShowSpeakPrompt] = useState(false);
   const [audioTestStep, setAudioTestStep] = useState<'speaker' | 'speaker-playing' | 'speaker-paused' | 'speaker-done' | 'mic' | 'mic-recording' | 'mic-playback'>('speaker');
   const [speakerLevel, setSpeakerLevel] = useState(0);
   const [micLevel, setMicLevel] = useState(0);
@@ -195,6 +196,7 @@ export default function InterviewPage() {
           addDebug('Avatar video/audio playback started.');
           setStreamActive(true);
           setStatus('Connected');
+          setShowSpeakPrompt(true);
         })
         .catch((e: Error) => {
           addDebug('Autoplay blocked: ' + e.message);
@@ -205,6 +207,17 @@ export default function InterviewPage() {
     }
   }, [streamReady, session]);
 
+  // Dismiss "your turn" prompt after first exchange or after 20s
+  useEffect(() => {
+    if (!showSpeakPrompt) return;
+    if (transcripts.length > 0) {
+      setShowSpeakPrompt(false);
+      return;
+    }
+    const t = setTimeout(() => setShowSpeakPrompt(false), 20000);
+    return () => clearTimeout(t);
+  }, [showSpeakPrompt, transcripts.length]);
+
   const startSession = async () => {
     if (startInProgressRef.current) return;
     startInProgressRef.current = true;
@@ -213,6 +226,7 @@ export default function InterviewPage() {
     setTranscripts([]);
     setStreamReady(false);
     setStreamActive(false);
+    setShowSpeakPrompt(false);
     setDebugInfo('Starting...');
     sessionStartTimeRef.current = Date.now();
     setElapsedSeconds(0);
@@ -273,7 +287,7 @@ export default function InterviewPage() {
       await newSession.start();
       hadActiveSessionRef.current = true;
       setSession(newSession);
-      setStatus('Waiting for avatar stream...');
+      setStatus('Waiting for avatar… You\'ll be able to speak once the avatar appears.');
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
       addDebug('Error: ' + message);
@@ -301,6 +315,7 @@ export default function InterviewPage() {
     setStreamActive(false);
     setStreamReady(false);
     setStatus('Idle');
+    setShowSpeakPrompt(false);
     setElapsedSeconds(0);
     setTimeRemainingNotification(null);
     router.push('/thank-you');
@@ -555,6 +570,15 @@ export default function InterviewPage() {
                 <span className="text-xl font-medium text-white/90">
                   {status === 'Idle' ? "Click the Start Interview button when you're ready." : status}
                 </span>
+              </div>
+            )}
+            {streamActive && showSpeakPrompt && (
+              <div
+                className="absolute bottom-0 left-0 right-0 z-10 px-4 py-3 bg-black/75 text-white text-sm font-medium text-center animate-fade"
+                role="status"
+                aria-live="polite"
+              >
+                It&apos;s your turn to speak. Go ahead and say hello. If you didn&apos;t hear the virtual interviewer, say hello again or verify your audio under Settings.
               </div>
             )}
           </div>
