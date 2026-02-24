@@ -24,44 +24,103 @@ export default function AdminLiveObservationPage() {
   const [ttsPaused, setTtsPaused] = useState(false);
   const [ttsMuted, setTtsMuted] = useState(false);
   const [ttsVolume, setTtsVolume] = useState(1);
+  const [ttsLoading, setTtsLoading] = useState(false);
   const lastCreatedRef = useRef<string | null>(null);
   const lastIdRef = useRef<string | null>(null);
   const displayedSegmentIdsRef = useRef<Set<string>>(new Set());
   const queueRef = useRef<Segment[]>([]);
-  const speakingRef = useRef(false);
-  const synthRef = useRef<SpeechSynthesis | null>(null);
+  const playingRef = useRef(false);
+  const currentAudioRef = useRef<HTMLAudioElement | null>(null);
   const sessionEndedRef = useRef(false);
   const transcriptIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const speakNext = useCallback(() => {
-    if (speakingRef.current || queueRef.current.length === 0 || ttsPaused || ttsMuted) return;
+  const playNext = useCallback(() => {
+    if (playingRef.current || queueRef.current.length === 0 || ttsPaused || ttsMuted) return;
     const seg = queueRef.current.shift();
     if (!seg || !seg.content.trim()) {
-      speakingRef.current = false;
-      setTimeout(speakNext, 100);
+      playingRef.current = false;
+      setTimeout(playNext, 50);
       return;
     }
-    if (typeof window === 'undefined' || !window.speechSynthesis) {
-      speakingRef.current = false;
-      setTimeout(speakNext, 100);
-      return;
-    }
-    const synth = window.speechSynthesis;
-    synthRef.current = synth;
-    const u = new SpeechSynthesisUtterance(seg.content);
-    u.volume = ttsMuted ? 0 : ttsVolume;
-    u.rate = 1;
-    u.onend = () => {
-      speakingRef.current = false;
-      setTimeout(speakNext, 50);
-    };
-    u.onerror = () => {
-      speakingRef.current = false;
-      setTimeout(speakNext, 50);
-    };
-    speakingRef.current = true;
-    synth.speak(u);
+    playingRef.current = true;
+    setTtsLoading(true);
+    fetch('/api/admin/live/tts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: seg.content, speaker: seg.speaker }),
+    })
+      .then((r) => {
+        if (!r.ok) throw new Error('TTS failed');
+        return r.blob();
+      })
+      .then((blob) => {
+        const url = URL.createObjectURL(blob);
+        const audio = new Audio(url);
+        currentAudioRef.current = audio;
+        audio.volume = ttsMuted ? 0 : ttsVolume;
+        audio.onended = () => {
+          URL.revokeObjectURL(url);
+          currentAudioRef.current = null;
+          playingRef.current = false;
+          setTtsLoading(false);
+          setTimeout(playNext, 50);
+        };
+        audio.onerror = () => {
+          URL.revokeObjectURL(url);
+          currentAudioRef.current = null;
+          playingRef.current = false;
+          setTtsLoading(false);
+          setTimeout(playNext, 50);
+        };
+        audio.play().catch(() => {
+          playingRef.current = false;
+          setTtsLoading(false);
+          setTimeout(playNext, 50);
+        });
+      })
+      .catch((err) => {
+        console.error('TTS fetch error:', err);
+        playingRef.current = false;
+        setTtsLoading(false);
+        setTimeout(playNext, 100);
+      });
   }, [ttsPaused, ttsMuted, ttsVolume]);
+
+  useEffect(() => {
+    const audio = currentAudioRef.current;
+    if (audio) {
+      audio.volume = ttsMuted ? 0 : ttsVolume;
+    }
+  }, [ttsVolume, ttsMuted]);
+
+  const resumeRealtime = useCallback(() => {
+    queueRef.current = [];
+    const audio = currentAudioRef.current;
+    if (audio) {
+      audio.pause();
+      audio.currentTime = 0;
+    }
+    currentAudioRef.current = null;
+    playingRef.current = false;
+    setTtsLoading(false);
+  }, []);
+
+  const playFromSegmentIndex = useCallback(
+    (index: number) => {
+      if (index < 0 || index >= segments.length) return;
+      const fromSegments = segments.slice(index);
+      queueRef.current = [...fromSegments];
+      const audio = currentAudioRef.current;
+      if (audio) {
+        audio.pause();
+        audio.currentTime = 0;
+      }
+      currentAudioRef.current = null;
+      playingRef.current = false;
+      if (!ttsPaused && !ttsMuted) playNext();
+    },
+    [segments, ttsPaused, ttsMuted, playNext]
+  );
 
   useEffect(() => {
     if (!id) return;
@@ -126,7 +185,7 @@ export default function AdminLiveObservationPage() {
           toAdd.forEach((s: Segment) => displayedIds.add(segId(s)));
           setSegments((prev) => {
             const prevIds = new Set(prev.map((p) => segId(p)));
-            const extra = toAdd.filter((s) => !prevIds.has(segId(s)));
+            const extra = toAdd.filter((s: Segment) => !prevIds.has(segId(s)));
             if (extra.length === 0) return prev;
             return [...prev, ...extra];
           });
@@ -134,7 +193,7 @@ export default function AdminLiveObservationPage() {
           if (lastAdded?.created_at) lastCreatedRef.current = lastAdded.created_at;
           if (lastAdded?.id) lastIdRef.current = lastAdded.id;
           toAdd.forEach((s: Segment) => queueRef.current.push(s));
-          speakNext();
+          playNext();
         })
         .catch(() => {});
     }
@@ -145,11 +204,21 @@ export default function AdminLiveObservationPage() {
       clearInterval(t);
       transcriptIntervalRef.current = null;
     };
-  }, [id, speakNext]);
+  }, [id, playNext]);
 
   useEffect(() => {
-    if (!ttsPaused && !ttsMuted) speakNext();
-  }, [ttsPaused, ttsMuted, ttsVolume, speakNext]);
+    if (!ttsPaused && !ttsMuted) playNext();
+  }, [ttsPaused, ttsMuted, ttsVolume, playNext]);
+
+  const handlePauseResume = useCallback(() => {
+    const audio = currentAudioRef.current;
+    if (ttsPaused) {
+      if (audio) audio.play();
+    } else {
+      if (audio) audio.pause();
+    }
+    setTtsPaused((p) => !p);
+  }, [ttsPaused]);
 
   if (loading) {
     return (
@@ -181,14 +250,22 @@ export default function AdminLiveObservationPage() {
         <Link href="/admin/live" className="btn sub-text text-sm">← Sessions</Link>
       </div>
 
-      <div className="rounded-lg border border-black/08 p-3 flex items-center gap-4 flex-wrap" style={{ background: 'var(--card-bg)' }}>
+      <div className="rounded-lg border border-black/08 p-3 flex items-center gap-3 flex-wrap" style={{ background: 'var(--card-bg)' }}>
         <span className="text-sm font-medium">TTS playback</span>
         <button
           type="button"
-          onClick={() => setTtsPaused((p) => !p)}
+          onClick={handlePauseResume}
           className="btn btn-primary text-sm"
         >
-          {ttsPaused ? 'Resume' : 'Pause'}
+          {ttsPaused ? 'Play' : 'Pause'}
+        </button>
+        <button
+          type="button"
+          onClick={resumeRealtime}
+          className="btn text-sm sub-text"
+          title="Clear queue and resume playing only new transcript as it arrives"
+        >
+          Resume real-time
         </button>
         <label className="flex items-center gap-2 text-sm">
           <span>Volume</span>
@@ -209,19 +286,27 @@ export default function AdminLiveObservationPage() {
         >
           {ttsMuted ? 'Unmute' : 'Mute'}
         </button>
+        {ttsLoading && <span className="text-xs sub-text">Generating…</span>}
       </div>
 
       <div className="rounded-lg border border-black/08 overflow-hidden flex flex-col" style={{ background: 'var(--card-bg)', minHeight: 280 }}>
         <div className="px-3 py-2 border-b border-black/08 text-sm font-semibold">Real-time transcript</div>
+        <p className="px-3 py-1 text-xs sub-text border-b border-black/06">Click a line to start playback from that line.</p>
         <div className="p-3 overflow-y-auto max-h-[400px] min-h-[200px] space-y-2">
           {segments.length === 0 ? (
             <p className="sub-text text-sm">No transcript yet. New segments will appear here and play via TTS when at least one observer is viewing.</p>
           ) : (
-            segments.map((seg) => (
-              <div key={seg.id} className="text-sm">
-                <span className="font-medium sub-text">{seg.speaker === 'AVATAR' ? 'Avatar' : 'Candidate'}:</span>{' '}
-                <span style={{ color: 'var(--text-primary)' }}>{seg.content}</span>
-              </div>
+            segments.map((seg, index) => (
+              <button
+                type="button"
+                key={seg.id}
+                onClick={() => playFromSegmentIndex(index)}
+                className="w-full text-left text-sm rounded px-2 py-1.5 hover:bg-black/06 transition"
+                style={{ color: 'var(--text-primary)' }}
+              >
+                <span className="font-medium sub-text">{seg.speaker === 'AVATAR' ? 'Interviewer' : 'Candidate'}:</span>{' '}
+                {seg.content}
+              </button>
             ))
           )}
         </div>
