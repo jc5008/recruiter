@@ -228,8 +228,8 @@ export default function WelcomePage() {
       }
       if (typeof window !== 'undefined') {
         sessionStorage.setItem(INTERVIEW_ID_KEY, data.interviewId ?? '');
-        sessionStorage.setItem(CANDIDATE_FIRST_NAME_KEY, data.candidateFirstName ?? '');
-        sessionStorage.setItem(CANDIDATE_LAST_NAME_KEY, data.candidateLastName ?? '');
+        sessionStorage.setItem(CANDIDATE_FIRST_NAME_KEY, data.candidateFirstName ?? data.candidate_first_name ?? '');
+        sessionStorage.setItem(CANDIDATE_LAST_NAME_KEY, data.candidateLastName ?? data.candidate_last_name ?? '');
       }
       router.push('/interview');
     } catch {

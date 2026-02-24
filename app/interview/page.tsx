@@ -4,6 +4,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { LiveAvatarSession, SessionEvent } from '@heygen/liveavatar-web-sdk';
 import Image from 'next/image';
+import { AudioControlsPill } from './AudioControlsPill';
 
 const INTERVIEW_ID_KEY = 'interview_id';
 const CANDIDATE_FIRST_NAME_KEY = 'candidate_first_name';
@@ -87,7 +88,7 @@ export default function InterviewPage() {
     setGateReady(true);
     const first = (sessionStorage.getItem(CANDIDATE_FIRST_NAME_KEY) ?? '').trim();
     const last = (sessionStorage.getItem(CANDIDATE_LAST_NAME_KEY) ?? '').trim();
-    const full = [first, last].filter(Boolean).join(' ');
+    const full = first && last ? `${first} ${last}` : first || last;
     setCandidateDisplayName(full ? `${full}'s Virtual Interview` : 'Virtual Interview');
   }, [router]);
 
@@ -608,6 +609,19 @@ export default function InterviewPage() {
                 aria-live="polite"
               >
                 It&apos;s your turn to speak. Go ahead and say hello. If you didn&apos;t hear the virtual interviewer, say hello again or verify your audio under Settings.
+              </div>
+            )}
+            {session && (
+              <div className="absolute bottom-4 left-4 z-20">
+                <AudioControlsPill
+                  session={session}
+                  remoteAudioElementRef={videoRef}
+                  selectedMicId={selectedMicId}
+                  selectedSpeakerId={selectedSpeakerId}
+                  onMicChange={setSelectedMicId}
+                  onSpeakerChange={setSelectedSpeakerId}
+                  onOpenAudioTest={openAudioTest}
+                />
               </div>
             )}
           </div>

@@ -16,6 +16,13 @@
   --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.06);
   --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08), 0 2px 4px rgba(0, 0, 0, 0.04);
   --transition: 0.2s ease;
+
+  /* Audio controls pill + general controls */
+  --bg-general: rgba(0, 0, 0, 0.06);
+  --text-on-general: var(--text-primary);
+  --border-line: rgba(0, 0, 0, 0.08);
+  --bg-general-hover: rgba(0, 0, 0, 0.1);
+  --bg-general-active: rgba(0, 0, 0, 0.14);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -169,6 +176,51 @@ body {
 
 .btn-danger:active {
   transform: scale(0.97);
+}
+
+/* General control buttons (pill controls) */
+.bg-general {
+  background: var(--bg-general);
+}
+.text-on-general {
+  color: var(--text-on-general);
+}
+.border-line {
+  border-color: var(--border-line);
+}
+.hover\:bg-general-hover:hover {
+  background: var(--bg-general-hover);
+}
+.active\:bg-general-active:active {
+  background: var(--bg-general-active);
+}
+
+/* Audio pill circular buttons (40x40) */
+.audio-pill-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 1px solid var(--border-line);
+  background: var(--bg-general);
+  color: var(--text-on-general);
+  cursor: pointer;
+  transition: background var(--transition);
+}
+.audio-pill-btn:hover {
+  background: var(--bg-general-hover);
+}
+.audio-pill-btn:active {
+  background: var(--bg-general-active);
+}
+.audio-pill-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.audio-pill-btn[data-muted="true"] {
+  color: var(--accent-red);
 }
 
 /* Progress footer */
