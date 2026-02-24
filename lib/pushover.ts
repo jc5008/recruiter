@@ -21,6 +21,9 @@ export async function sendPushoverNotification(
   const user = process.env.PUSHOVER_GROUP_KEY ?? process.env.PUSHOVER_USER_KEY;
 
   if (!token || !user) {
+    if (process.env.NODE_ENV !== 'test') {
+      console.warn('Pushover skipped: PUSHOVER_API_TOKEN or PUSHOVER_GROUP_KEY (or PUSHOVER_USER_KEY) not set');
+    }
     return false;
   }
 
@@ -42,6 +45,9 @@ export async function sendPushoverNotification(
       const text = await res.text();
       console.error('Pushover API error:', res.status, text);
       return false;
+    }
+    if (process.env.NODE_ENV !== 'test') {
+      console.info('Pushover sent:', options.title ?? '(no title)');
     }
     return true;
   } catch (err) {

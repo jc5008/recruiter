@@ -20,6 +20,7 @@ export default function AdminDeveloperPage() {
   const [compiling, setCompiling] = useState(false);
   const [evaluating, setEvaluating] = useState(false);
   const [delivering, setDelivering] = useState(false);
+  const [pushoverTesting, setPushoverTesting] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [role, setRole] = useState<string | null>(null);
@@ -157,6 +158,30 @@ export default function AdminDeveloperPage() {
     }
   }
 
+  async function handlePushoverTest() {
+    setError('');
+    setSuccess('');
+    setPushoverTesting(true);
+
+    try {
+      const res = await fetch('/api/admin/developer/pushover-test', { method: 'POST' });
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.error || 'Pushover test failed');
+        return;
+      }
+
+      setSuccess(data.message || 'Test notification sent. Check your Pushover device(s).');
+      setTimeout(() => setSuccess(''), 6000);
+    } catch (err) {
+      setError('Request failed');
+      console.error(err);
+    } finally {
+      setPushoverTesting(false);
+    }
+  }
+
   if (role !== 'SUPER_ADMIN' && role !== null) {
     return (
       <div className="max-w-2xl">
@@ -248,6 +273,21 @@ export default function AdminDeveloperPage() {
 
           {error && <p className="text-sm text-red-600">{error}</p>}
           {success && <p className="text-sm text-green-600">{success}</p>}
+
+          <div className="pt-6 mt-6 border-t border-black/08">
+            <h2 className="text-lg font-semibold mb-2">Pushover</h2>
+            <p className="text-sm sub-text mb-3">
+              When a candidate enters their interview code, a Pushover notification is sent (candidate name and position). Use this button to confirm Pushover is configured and working.
+            </p>
+            <button
+              type="button"
+              onClick={handlePushoverTest}
+              disabled={pushoverTesting}
+              className="btn btn-primary"
+            >
+              {pushoverTesting ? 'Sending…' : 'Send test Pushover notification'}
+            </button>
+          </div>
         </div>
       )}
 

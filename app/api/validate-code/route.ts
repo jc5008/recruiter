@@ -37,7 +37,25 @@ export async function POST(request: Request) {
       );
     }
 
+    const firstName = (row.candidate_first_name ?? '').trim();
+    const lastName = (row.candidate_last_name ?? '').trim();
+    const position = (row.job_title ?? 'Unknown position').trim();
+    const fullName = [firstName, lastName].filter(Boolean).join(' ') || 'Candidate';
+
+    const sendCodeEntryNotification = async (title: string, reason?: string) => {
+      const message = reason ? `${fullName} — ${position} (${reason})` : `${fullName} — ${position}`;
+      try {
+        const sent = await sendPushoverNotification(message, { title });
+        if (process.env.NODE_ENV !== 'test') {
+          console.info(`validate-code: Pushover ${sent ? 'sent' : 'failed'} for interviewId=${row.id} code=${code}`);
+        }
+      } catch (err) {
+        console.error('validate-code: Pushover notification failed:', err);
+      }
+    };
+
     if (!VALID_STATUSES.includes(row.status)) {
+      await sendCodeEntryNotification('Code entry (interview no longer available)', 'not available');
       return NextResponse.json(
         { ok: false, error: 'This interview is no longer available.' },
         { status: 403 }
@@ -46,6 +64,7 @@ export async function POST(request: Request) {
 
     const deadline = new Date(row.deadline_at);
     if (isNaN(deadline.getTime()) || deadline < new Date()) {
+      await sendCodeEntryNotification('Code entry (expired)', 'deadline passed');
       return NextResponse.json(
         { ok: false, error: 'This code has expired.' },
         { status: 403 }
@@ -57,6 +76,7 @@ export async function POST(request: Request) {
     if (startedAt && !isNaN(startedAt.getTime())) {
       const thirtyMinMs = 30 * 60 * 1000;
       if (Date.now() - startedAt.getTime() > thirtyMinMs) {
+        await sendCodeEntryNotification('Code entry (session expired)', '30-min window passed');
         return NextResponse.json(
           { ok: false, error: 'This session has expired. Please contact HR for a new code.' },
           { status: 403 }
@@ -64,15 +84,8 @@ export async function POST(request: Request) {
       }
     }
 
-    // Notify via Pushover (fire-and-forget; do not fail response if Pushover fails)
-    const firstName = (row.candidate_first_name ?? '').trim();
-    const lastName = (row.candidate_last_name ?? '').trim();
-    const position = (row.job_title ?? 'Unknown position').trim();
-    const fullName = [firstName, lastName].filter(Boolean).join(' ') || 'Candidate';
-    sendPushoverNotification(
-      `${fullName} — ${position}`,
-      { title: 'Candidate entered interview code' }
-    ).catch((err) => console.error('Pushover notification failed:', err));
+    // Accepted: notify and return success
+    await sendCodeEntryNotification('Virtual Interview Started');
 
     return NextResponse.json({
       ok: true,
