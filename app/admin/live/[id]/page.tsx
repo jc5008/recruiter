@@ -7,11 +7,51 @@ import { useParams } from 'next/navigation';
 type Segment = { id: string; speaker: string; content: string; timestamp_offset_ms: number | null; created_at: string };
 type Meta = { id: string; candidate_first_name: string; candidate_last_name: string; position_title: string; status: string; started_at: string | null };
 
+/** TTS queue item: one or more segments merged (same speaker, gaps ≤ 5s). */
+type TTSChunk = { text: string; speaker: string; lastCreatedAt: number };
+
 function segId(s: Segment): string {
   return String(s?.id ?? '').trim().toLowerCase();
 }
 
 const POLL_MS = 2000;
+const TTS_MERGE_GAP_MS = 5000;
+
+/** Convert segments to TTS chunks: same speaker concatenated until speaker change or gap > 5s. */
+function segmentsToTTSChunks(segments: Segment[]): TTSChunk[] {
+  const chunks: TTSChunk[] = [];
+  for (const seg of segments) {
+    const content = (seg.content ?? '').trim();
+    if (!content) continue;
+    const t = seg.created_at ? new Date(seg.created_at).getTime() : 0;
+    const last = chunks[chunks.length - 1];
+    const gapOk = last && t > 0 && last.lastCreatedAt > 0 && t - last.lastCreatedAt <= TTS_MERGE_GAP_MS;
+    if (last && last.speaker === seg.speaker && gapOk) {
+      last.text += (last.text ? ' ' : '') + content;
+      last.lastCreatedAt = t;
+    } else {
+      chunks.push({ text: content, speaker: seg.speaker, lastCreatedAt: t });
+    }
+  }
+  return chunks;
+}
+
+/** Append new segments to the TTS queue, merging with last chunk when same speaker and within 5s. */
+function appendSegmentsToQueue(queue: TTSChunk[], segments: Segment[]): void {
+  for (const seg of segments) {
+    const content = (seg.content ?? '').trim();
+    if (!content) continue;
+    const t = seg.created_at ? new Date(seg.created_at).getTime() : 0;
+    const last = queue[queue.length - 1];
+    const gapOk = last && t > 0 && last.lastCreatedAt > 0 && t - last.lastCreatedAt <= TTS_MERGE_GAP_MS;
+    if (last && last.speaker === seg.speaker && gapOk) {
+      last.text += (last.text ? ' ' : '') + content;
+      last.lastCreatedAt = t;
+    } else {
+      queue.push({ text: content, speaker: seg.speaker, lastCreatedAt: t });
+    }
+  }
+}
 const ENDED_STATUSES = ['COMPLETED', 'EXPIRED', 'FAILED'];
 
 export default function AdminLiveObservationPage() {
@@ -28,7 +68,7 @@ export default function AdminLiveObservationPage() {
   const lastCreatedRef = useRef<string | null>(null);
   const lastIdRef = useRef<string | null>(null);
   const displayedSegmentIdsRef = useRef<Set<string>>(new Set());
-  const queueRef = useRef<Segment[]>([]);
+  const queueRef = useRef<TTSChunk[]>([]);
   const playingRef = useRef(false);
   const currentAudioRef = useRef<HTMLAudioElement | null>(null);
   const sessionEndedRef = useRef(false);
@@ -36,8 +76,8 @@ export default function AdminLiveObservationPage() {
 
   const playNext = useCallback(() => {
     if (playingRef.current || queueRef.current.length === 0 || ttsPaused || ttsMuted) return;
-    const seg = queueRef.current.shift();
-    if (!seg || !seg.content.trim()) {
+    const chunk = queueRef.current.shift();
+    if (!chunk || !chunk.text.trim()) {
       playingRef.current = false;
       setTimeout(playNext, 50);
       return;
@@ -47,7 +87,7 @@ export default function AdminLiveObservationPage() {
     fetch('/api/admin/live/tts', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text: seg.content, speaker: seg.speaker }),
+      body: JSON.stringify({ text: chunk.text, speaker: chunk.speaker }),
     })
       .then((r) => {
         if (!r.ok) throw new Error('TTS failed');
@@ -109,7 +149,7 @@ export default function AdminLiveObservationPage() {
     (index: number) => {
       if (index < 0 || index >= segments.length) return;
       const fromSegments = segments.slice(index);
-      queueRef.current = [...fromSegments];
+      queueRef.current = segmentsToTTSChunks(fromSegments);
       const audio = currentAudioRef.current;
       if (audio) {
         audio.pause();
@@ -174,10 +214,12 @@ export default function AdminLiveObservationPage() {
             const last = data.segments[data.segments.length - 1];
             if (last?.created_at) lastCreatedRef.current = last.created_at;
             if (last?.id) lastIdRef.current = last.id;
+            queueRef.current = segmentsToTTSChunks(data.segments);
             if (sessionEndedRef.current && transcriptIntervalRef.current) {
               clearInterval(transcriptIntervalRef.current);
               transcriptIntervalRef.current = null;
             }
+            playNext();
             return;
           }
           const toAdd = data.segments.filter((s: Segment) => !displayedIds.has(segId(s)));
@@ -192,7 +234,7 @@ export default function AdminLiveObservationPage() {
           const lastAdded = toAdd[toAdd.length - 1];
           if (lastAdded?.created_at) lastCreatedRef.current = lastAdded.created_at;
           if (lastAdded?.id) lastIdRef.current = lastAdded.id;
-          toAdd.forEach((s: Segment) => queueRef.current.push(s));
+          appendSegmentsToQueue(queueRef.current, toAdd);
           playNext();
         })
         .catch(() => {});

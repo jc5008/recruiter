@@ -6,6 +6,8 @@ import { LiveAvatarSession, SessionEvent } from '@heygen/liveavatar-web-sdk';
 import Image from 'next/image';
 
 const INTERVIEW_ID_KEY = 'interview_id';
+const CANDIDATE_FIRST_NAME_KEY = 'candidate_first_name';
+const CANDIDATE_LAST_NAME_KEY = 'candidate_last_name';
 
 type ChatMessage = {
   sender: 'User' | 'Avatar';
@@ -30,6 +32,8 @@ export default function InterviewPage() {
   const [showSkipConfirm, setShowSkipConfirm] = useState(false);
   const [showTranscriptOverlay, setShowTranscriptOverlay] = useState(false);
   const [showSpeakPrompt, setShowSpeakPrompt] = useState(false);
+  const [overlayDismissedByTap, setOverlayDismissedByTap] = useState(false);
+  const [candidateDisplayName, setCandidateDisplayName] = useState('');
   const [audioTestStep, setAudioTestStep] = useState<'speaker' | 'speaker-playing' | 'speaker-paused' | 'speaker-done' | 'mic' | 'mic-recording' | 'mic-playback'>('speaker');
   const [speakerLevel, setSpeakerLevel] = useState(0);
   const [micLevel, setMicLevel] = useState(0);
@@ -71,15 +75,20 @@ export default function InterviewPage() {
   const [isStarting, setIsStarting] = useState(false);
   const startInProgressRef = useRef(false);
 
-  // Gate: require valid interview_id from sessionStorage (set after code validation)
+  // Gate: require valid interview_id from sessionStorage (set after code validation); read candidate name for header
   useEffect(() => {
-    const id = typeof window !== 'undefined' ? sessionStorage.getItem(INTERVIEW_ID_KEY) : null;
+    if (typeof window === 'undefined') return;
+    const id = sessionStorage.getItem(INTERVIEW_ID_KEY);
     if (!id) {
       router.replace('/');
       return;
     }
     setInterviewId(id);
     setGateReady(true);
+    const first = (sessionStorage.getItem(CANDIDATE_FIRST_NAME_KEY) ?? '').trim();
+    const last = (sessionStorage.getItem(CANDIDATE_LAST_NAME_KEY) ?? '').trim();
+    const full = [first, last].filter(Boolean).join(' ');
+    setCandidateDisplayName(full ? `${full}'s Virtual Interview` : 'Virtual Interview');
   }, [router]);
 
   // When user closes tab/window or navigates away without clicking Leave Interview, request completion so analysis still runs
@@ -499,7 +508,7 @@ export default function InterviewPage() {
         <div className="flex items-center gap-2">
           <Image src="/wvs_logo.png" alt="WV Supply Logo" width={128} height={36} className="shrink-0 w-[128px] h-[36px] object-contain" />
         </div>
-        <h1 className="display-title text-center justify-self-center">Virtual Interview</h1>
+        <h1 className="display-title text-center justify-self-center">{candidateDisplayName || 'Virtual Interview'}</h1>
         <div className="flex items-center gap-1 justify-self-end">
           <div className="relative" ref={helpRef}>
             <button
@@ -565,8 +574,28 @@ export default function InterviewPage() {
         <div className="flex-1 min-w-0 min-h-0 md:flex-none md:w-[70vw] flex flex-col items-center overflow-hidden min-h-0">
           <div className="info-card relative w-full max-w-2xl md:max-w-none aspect-video bg-[var(--text-primary)] overflow-hidden flex-1 min-h-0">
             <video ref={videoRef} autoPlay playsInline className="w-full h-full object-cover" />
-            {!streamActive && (
-              <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/50 z-10">
+            {!streamActive && !overlayDismissedByTap && (
+              <div
+                className="absolute inset-0 flex flex-col items-center justify-center bg-black/50 z-10 cursor-pointer"
+                role="button"
+                tabIndex={0}
+                onClick={() => {
+                  setOverlayDismissedByTap(true);
+                  videoRef.current?.play()?.catch(() => {});
+                }}
+                onTouchEnd={() => {
+                  setOverlayDismissedByTap(true);
+                  videoRef.current?.play()?.catch(() => {});
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    setOverlayDismissedByTap(true);
+                    videoRef.current?.play()?.catch(() => {});
+                  }
+                }}
+                aria-label="Dismiss overlay and try playing video"
+              >
                 <span className="text-xl font-medium text-white/90">
                   {status === 'Idle' ? "Click the Start Interview button when you're ready." : status}
                 </span>

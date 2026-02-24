@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 
 const INTERVIEW_ID_KEY = 'interview_id';
 const CANDIDATE_FIRST_NAME_KEY = 'candidate_first_name';
+const CANDIDATE_LAST_NAME_KEY = 'candidate_last_name';
 
 type WizardStep = 'welcome' | 'audio' | 'code';
 type AudioTestStep = 'speaker' | 'speaker-playing' | 'speaker-paused' | 'speaker-done' | 'mic' | 'mic-recording' | 'mic-playback';
@@ -228,6 +229,7 @@ export default function WelcomePage() {
       if (typeof window !== 'undefined') {
         sessionStorage.setItem(INTERVIEW_ID_KEY, data.interviewId ?? '');
         sessionStorage.setItem(CANDIDATE_FIRST_NAME_KEY, data.candidateFirstName ?? '');
+        sessionStorage.setItem(CANDIDATE_LAST_NAME_KEY, data.candidateLastName ?? '');
       }
       router.push('/interview');
     } catch {

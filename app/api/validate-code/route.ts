@@ -91,6 +91,7 @@ export async function POST(request: Request) {
       ok: true,
       interviewId: row.id,
       candidateFirstName: row.candidate_first_name ?? '',
+      candidateLastName: row.candidate_last_name ?? '',
     });
   } catch (err) {
     if (err instanceof Error && err.message.includes('sql_DATABASE_URL')) {
