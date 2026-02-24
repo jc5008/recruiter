@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getSql } from '@/lib/db';
+import { sendPushoverNotification } from '@/lib/pushover';
 
 const VALID_STATUSES = ['REGISTERED', 'ACTIVE'];
 
@@ -16,16 +17,17 @@ export async function POST(request: Request) {
     }
 
     const sql = getSql();
-    // Case-insensitive match so Demo001, demo001, DEMO001 all work
+    // Case-insensitive match so Demo001, demo001, DEMO001 all work; join requisitions for job title
     const rows = await sql`
-      SELECT id, candidate_first_name, deadline_at, status, started_at
-      FROM interviews
-      WHERE access_code ILIKE ${code}
+      SELECT i.id, i.candidate_first_name, i.candidate_last_name, i.deadline_at, i.status, i.started_at, r.job_title
+      FROM interviews i
+      LEFT JOIN requisitions r ON r.id = i.requisition_id
+      WHERE i.access_code ILIKE ${code}
       LIMIT 1
     `;
 
     const row = rows[0] as
-      | { id: string; candidate_first_name: string; deadline_at: Date; status: string; started_at: Date | null }
+      | { id: string; candidate_first_name: string; candidate_last_name: string; deadline_at: Date; status: string; started_at: Date | null; job_title: string | null }
       | undefined;
 
     if (!row) {
@@ -61,6 +63,16 @@ export async function POST(request: Request) {
         );
       }
     }
+
+    // Notify via Pushover (fire-and-forget; do not fail response if Pushover fails)
+    const firstName = (row.candidate_first_name ?? '').trim();
+    const lastName = (row.candidate_last_name ?? '').trim();
+    const position = (row.job_title ?? 'Unknown position').trim();
+    const fullName = [firstName, lastName].filter(Boolean).join(' ') || 'Candidate';
+    sendPushoverNotification(
+      `${fullName} — ${position}`,
+      { title: 'Candidate entered interview code' }
+    ).catch((err) => console.error('Pushover notification failed:', err));
 
     return NextResponse.json({
       ok: true,
