@@ -6,8 +6,10 @@ import { VoiceChatEvent } from '@heygen/liveavatar-web-sdk';
 
 type DeviceInfo = { deviceId: string; label: string };
 
-const setSinkIdSupported =
-  typeof document !== 'undefined' && 'setSinkId' in HTMLMediaElement.prototype;
+function isSetSinkIdSupported(): boolean {
+  if (typeof document === 'undefined' || typeof HTMLMediaElement === 'undefined') return false;
+  return 'setSinkId' in HTMLMediaElement.prototype;
+}
 
 export type AudioControlsPillProps = {
   session: LiveAvatarSession | null;
@@ -95,7 +97,7 @@ export function AudioControlsPill({
   }, [session]);
 
   useEffect(() => {
-    if (!setSinkIdSupported || !remoteAudioElementRef.current || !selectedSpeakerId) return;
+    if (!isSetSinkIdSupported() || !remoteAudioElementRef.current || !selectedSpeakerId) return;
     const el = remoteAudioElementRef.current;
     el.setSinkId(selectedSpeakerId).catch(() => {});
   }, [selectedSpeakerId, remoteAudioElementRef]);
@@ -158,8 +160,7 @@ export function AudioControlsPill({
   );
 
   const micDisabled = !session || !hasMicPermission;
-  const selectedMicLabel = mics.find((d) => d.deviceId === selectedMicId)?.label ?? selectedMicId || 'Default';
-  const selectedSpeakerLabel = speakers.find((d) => d.deviceId === selectedSpeakerId)?.label ?? selectedSpeakerId || 'Default';
+  const selectedMicLabel = mics.find((d) => d.deviceId === selectedMicId)?.label ?? (selectedMicId || 'Default');
 
   return (
     <div
@@ -210,7 +211,7 @@ export function AudioControlsPill({
                   ))}
                 </select>
               </div>
-              {setSinkIdSupported && (
+              {isSetSinkIdSupported() && (
                 <div>
                   <label className="sub-text block mb-1">Speaker</label>
                   <select
@@ -227,7 +228,7 @@ export function AudioControlsPill({
                   </select>
                 </div>
               )}
-              {!setSinkIdSupported && (
+              {!isSetSinkIdSupported() && (
                 <p className="text-xs sub-text">Speaker selection not supported in this browser.</p>
               )}
             </div>
