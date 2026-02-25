@@ -74,13 +74,15 @@ export function AudioControlsPill({
     await refreshDevices();
   }, [refreshDevices]);
 
+  // Only enumerate devices (no getUserMedia) on mount to avoid competing with HeyGen SDK for the mic.
+  // Full device list with labels is loaded when the user opens the popover via refreshDevicesWithPermission().
   useEffect(() => {
-    refreshDevicesWithPermission();
+    refreshDevices();
     const handleDeviceChange = () => refreshDevices();
     navigator.mediaDevices?.addEventListener('devicechange', handleDeviceChange);
     return () =>
       navigator.mediaDevices?.removeEventListener('devicechange', handleDeviceChange);
-  }, [refreshDevicesWithPermission, refreshDevices]);
+  }, [refreshDevices]);
 
   useEffect(() => {
     if (!session?.voiceChat) return;
@@ -96,11 +98,8 @@ export function AudioControlsPill({
     };
   }, [session]);
 
-  useEffect(() => {
-    if (!isSetSinkIdSupported() || !remoteAudioElementRef.current || !selectedSpeakerId) return;
-    const el = remoteAudioElementRef.current;
-    el.setSinkId(selectedSpeakerId).catch(() => {});
-  }, [selectedSpeakerId, remoteAudioElementRef]);
+  // Do not apply setSinkId on mount—it can freeze the avatar video while the stream is attaching.
+  // Only apply when the user explicitly changes the speaker in the popover (see handleSpeakerSelect).
 
   useEffect(() => {
     if (!isPopoverOpen) return;
@@ -155,11 +154,14 @@ export function AudioControlsPill({
   const handleSpeakerSelect = useCallback(
     (deviceId: string) => {
       onSpeakerChange(deviceId);
+      if (isSetSinkIdSupported() && remoteAudioElementRef.current) {
+        remoteAudioElementRef.current.setSinkId(deviceId).catch(() => {});
+      }
     },
     [onSpeakerChange]
   );
 
-  const micDisabled = !session || !hasMicPermission;
+  const micDisabled = !session;
   const selectedMicLabel = mics.find((d) => d.deviceId === selectedMicId)?.label ?? (selectedMicId || 'Default');
 
   return (
