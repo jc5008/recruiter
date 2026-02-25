@@ -54,26 +54,15 @@ export async function POST(
         ? Math.floor((now.getTime() - startedAt.getTime()) / 1000)
         : null;
 
-    // Update interview status (only if not already completed)
-    if (interview.status !== 'COMPLETED') {
-      await sql`
-        UPDATE interviews
-        SET 
-          status = 'COMPLETED',
-          ended_at = ${now},
-          duration_seconds = ${durationSeconds}
-        WHERE id = ${interviewId}
-      `;
-    } else if (!interview.ended_at) {
-      // If already completed but missing ended_at, update it
-      await sql`
-        UPDATE interviews
-        SET 
-          ended_at = ${now},
-          duration_seconds = ${durationSeconds}
-        WHERE id = ${interviewId}
-      `;
-    }
+    // Update interview: set COMPLETED and latest ended_at/duration (allows reprocessing when code was reused within 31 min)
+    await sql`
+      UPDATE interviews
+      SET 
+        status = 'COMPLETED',
+        ended_at = ${now},
+        duration_seconds = ${durationSeconds}
+      WHERE id = ${interviewId}
+    `;
 
     // Aggregate all data for AI evaluation
     let aggregatedData;

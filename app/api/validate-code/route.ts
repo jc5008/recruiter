@@ -2,7 +2,8 @@ import { NextResponse } from 'next/server';
 import { getSql } from '@/lib/db';
 import { sendPushoverNotification } from '@/lib/pushover';
 
-const VALID_STATUSES = ['REGISTERED', 'ACTIVE'];
+/** Reuse window: same code can be used again within this many ms of started_at, regardless of status (e.g. COMPLETED). */
+const REUSE_WINDOW_MS = 31 * 60 * 1000;
 
 export async function POST(request: Request) {
   try {
@@ -54,14 +55,6 @@ export async function POST(request: Request) {
       }
     };
 
-    if (!VALID_STATUSES.includes(row.status)) {
-      await sendCodeEntryNotification('Code entry (interview no longer available)', 'not available');
-      return NextResponse.json(
-        { ok: false, error: 'This interview is no longer available.' },
-        { status: 403 }
-      );
-    }
-
     const deadline = new Date(row.deadline_at);
     if (isNaN(deadline.getTime()) || deadline < new Date()) {
       await sendCodeEntryNotification('Code entry (expired)', 'deadline passed');
@@ -71,12 +64,11 @@ export async function POST(request: Request) {
       );
     }
 
-    // Reuse within 30-minute window of first start (2.3)
+    // Reuse within 31-minute window of first start; allow regardless of status (COMPLETED, etc.). Outside window, session is expired.
     const startedAt = row.started_at ? new Date(row.started_at) : null;
     if (startedAt && !isNaN(startedAt.getTime())) {
-      const thirtyMinMs = 30 * 60 * 1000;
-      if (Date.now() - startedAt.getTime() > thirtyMinMs) {
-        await sendCodeEntryNotification('Code entry (session expired)', '30-min window passed');
+      if (Date.now() - startedAt.getTime() > REUSE_WINDOW_MS) {
+        await sendCodeEntryNotification('Code entry (session expired)', 'reuse window passed');
         return NextResponse.json(
           { ok: false, error: 'This session has expired. Please contact HR for a new code.' },
           { status: 403 }
