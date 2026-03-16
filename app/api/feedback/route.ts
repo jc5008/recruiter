@@ -17,7 +17,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Interview id is required' }, { status: 400 });
     }
 
-    const sql = getSql();
+    let sql;
+    try {
+      sql = getSql();
+    } catch (dbErr) {
+      const msg = dbErr instanceof Error ? dbErr.message : String(dbErr);
+      console.error('Feedback API: database not configured', msg);
+      return NextResponse.json(
+        { error: 'Feedback is temporarily unavailable.' },
+        { status: 503 }
+      );
+    }
     const interviewRows = await sql`
       SELECT i.id, i.candidate_first_name, i.candidate_last_name, i.started_at, r.job_title
       FROM interviews i
@@ -81,26 +91,38 @@ export async function POST(request: NextRequest) {
       const interviewDate = interview.started_at
         ? new Date(interview.started_at).toLocaleDateString(undefined, { dateStyle: 'long' })
         : new Date().toLocaleDateString(undefined, { dateStyle: 'long' });
-      sendCandidateFeedbackFollowUpEmail({
-        candidateName,
-        jobTitle: interview.job_title ?? null,
-        interviewDate,
-        candidateId: interview.id,
-        overallExperience: overall_experience,
-        easeOfUse: ease_of_use,
-        comfortLevel: comfort_level,
-        technicalProblems: technical_problems,
-        technicalIssueTypes: technical_issue_types,
-        fairChance: fair_chance,
-        additionalComments: additional_comments,
-      }).then((r) => {
-        if (!r.ok) console.error('Feedback follow-up email failed:', r.error);
-      });
+      try {
+        const emailResult = await sendCandidateFeedbackFollowUpEmail({
+          candidateName,
+          jobTitle: interview.job_title ?? null,
+          interviewDate,
+          candidateId: interview.id,
+          overallExperience: overall_experience,
+          easeOfUse: ease_of_use,
+          comfortLevel: comfort_level,
+          technicalProblems: technical_problems,
+          technicalIssueTypes: technical_issue_types,
+          fairChance: fair_chance,
+          additionalComments: additional_comments,
+        });
+        if (!emailResult.ok) console.error('Feedback follow-up email failed:', emailResult.error);
+      } catch (emailErr) {
+        console.error('Feedback follow-up email error:', emailErr);
+      }
     }
 
     return NextResponse.json({ ok: true });
   } catch (e) {
-    console.error('Feedback submit error:', e);
+    const err = e instanceof Error ? e : new Error(String(e));
+    console.error('Feedback submit error:', err.message, err.cause ?? err.stack);
+    const msg = err.message || '';
+    const isMissingTable = /relation ["']?candidate_feedback["']? does not exist|table ["']?candidate_feedback["']? does not exist/i.test(msg);
+    if (isMissingTable) {
+      return NextResponse.json(
+        { error: 'Feedback cannot be saved right now. The feedback feature may not be set up on this server yet.' },
+        { status: 503 }
+      );
+    }
     return NextResponse.json({ error: 'Failed to submit feedback' }, { status: 500 });
   }
 }

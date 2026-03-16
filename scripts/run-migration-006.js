@@ -1,12 +1,14 @@
 /**
  * Run migration 006: Create candidate_feedback table.
+ * Uses pg client so DDL persists (Neon serverless driver does not persist DDL).
  *
- * Usage: node -r dotenv/config scripts/run-migration-006.js dotenv_config_path=.env.local
+ * Usage: node scripts/run-migration-006.js
+ *    or: node -r dotenv/config scripts/run-migration-006.js dotenv_config_path=.env.local
  */
-require('dotenv').config({ path: process.env.dotenv_config_path || '.env.local' });
-const { neon } = require('@neondatabase/serverless');
-const { readFileSync } = require('fs');
-const { join } = require('path');
+const path = require('path');
+const fs = require('fs');
+require('dotenv').config({ path: process.env.dotenv_config_path || path.join(__dirname, '..', '.env.local') });
+const { Client } = require('pg');
 
 const connectionString = process.env.sql_DATABASE_URL;
 if (!connectionString) {
@@ -14,19 +16,35 @@ if (!connectionString) {
   process.exit(1);
 }
 
-const sql = neon(connectionString);
-
 async function run() {
+  const client = new Client({ connectionString });
   try {
-    const migrationPath = join(__dirname, '../schema/006_candidate_feedback.sql');
-    const migrationSQL = readFileSync(migrationPath, 'utf-8');
-
+    await client.connect();
+    const exists = await client.query(
+      "SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'candidate_feedback'"
+    );
+    if (exists.rows.length > 0) {
+      console.log('Migration 006 already applied (candidate_feedback exists).');
+      return;
+    }
+    const migrationPath = path.join(__dirname, '..', 'schema', '006_candidate_feedback.sql');
+    const migrationSQL = fs.readFileSync(migrationPath, 'utf-8');
     console.log('Running migration 006: candidate_feedback table...');
-    await sql.unsafe(migrationSQL);
-    console.log('Migration 006 completed successfully');
+    await client.query(migrationSQL);
+    console.log('Migration 006 completed successfully.');
+    const check = await client.query(
+      "SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'candidate_feedback'"
+    );
+    if (check.rows.length === 0) {
+      console.error('Verification failed: candidate_feedback table not found after migration.');
+      process.exit(1);
+    }
+    console.log('Verified: candidate_feedback table exists.');
   } catch (err) {
     console.error('Migration failed:', err.message || err);
     process.exit(1);
+  } finally {
+    await client.end();
   }
 }
 
