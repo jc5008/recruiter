@@ -1,11 +1,10 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 
 export default function AdminLoginPage() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const from = searchParams.get('from') || '/admin';
   const [email, setEmail] = useState('');
@@ -28,8 +27,9 @@ export default function AdminLoginPage() {
         setError(data.error || 'Login failed');
         return;
       }
-      router.push(from);
-      router.refresh();
+      // Full page redirect so the login prompt disappears and middleware sees the new cookie
+      window.location.href = from;
+      return;
     } catch {
       setError('Login failed');
     } finally {

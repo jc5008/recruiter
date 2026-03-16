@@ -7,6 +7,9 @@ export default function AdminNav({ role }: { role?: string }) {
       <Link href="/admin" className="text-sm sub-text hover:opacity-80">
         Dashboard
       </Link>
+      <Link href="/admin/candidates" className="text-sm sub-text hover:opacity-80">
+        Candidates
+      </Link>
       <Link href="/admin/register" className="text-sm sub-text hover:opacity-80">
         Register candidate
       </Link>

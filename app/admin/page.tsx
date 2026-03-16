@@ -13,6 +13,12 @@ export default async function AdminDashboardPage() {
       <p className="sub-text text-sm mb-6">Manage candidates, requisitions, and live sessions.</p>
       <ul className="space-y-3">
         <li>
+          <Link href="/admin/candidates" className="block p-4 rounded-lg border border-black/08 hover:bg-black/04 transition" style={{ background: 'var(--card-bg)' }}>
+            <span className="font-medium">Registered candidates</span>
+            <span className="block text-sm sub-text mt-1">View candidates by name and job title; see registration details and interview codes.</span>
+          </Link>
+        </li>
+        <li>
           <Link href="/admin/register" className="block p-4 rounded-lg border border-black/08 hover:bg-black/04 transition" style={{ background: 'var(--card-bg)' }}>
             <span className="font-medium">Register new candidate</span>
             <span className="block text-sm sub-text mt-1">Create an interview and get an access code.</span>

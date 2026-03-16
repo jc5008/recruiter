@@ -1,75 +1,162 @@
 # Recruiter DC — Virtual Interview
 
-A Next.js web application that delivers a **virtual interview** experience for WV Supply. Candidates speak in real time with an AI-powered video avatar (HeyGen Live Avatar) and see a live transcript of the conversation.
+A Next.js web application for **WV Supply** that delivers an AI-powered virtual interview experience. Candidates enter a unique interview code, complete a short orientation and audio check, then speak in real time with a video avatar (HeyGen Live Avatar). The conversation is transcribed, persisted, and after the interview an AI screening report is generated and emailed as a PDF.
 
 ---
 
-## Overview
+## Product Overview
 
-- **Purpose:** Let candidates complete an interview by talking to an AI interviewer avatar in the browser.
-- **Stack:** Next.js 16 (App Router), React 19, TypeScript, Tailwind CSS 4.
-- **Integrations:** [HeyGen Live Avatar](https://www.heygen.com/) for real-time avatar video and voice chat; session tokens and optional LiveKit data via backend API routes.
+**Purpose:** Enable candidates to complete a job screening interview by talking to an AI interviewer avatar in the browser. HR staff register candidates and receive unique access codes; admins can watch live sessions (with TTS playback) and receive post-interview AI evaluation reports by email.
+
+**Stack:** Next.js 16 (App Router), React 19, TypeScript, Tailwind CSS 4, Neon PostgreSQL, HeyGen Live Avatar SDK.
+
+**Integrations:** HeyGen Live Avatar (real-time avatar video and voice), Resend (email and PDF delivery), OpenAI (screening evaluation), Pushover (optional candidate-entry notifications), Puppeteer/Chromium (PDF generation on Vercel).
 
 ---
 
-## Features & Functions
+## Features (Summary)
 
-### Core Flow
+| Area | Feature | Description |
+|------|---------|-------------|
+| **Candidate** | Interview code entry | Welcome page: candidate enters code; validated against DB (deadline, 31‑min reuse window). |
+| **Candidate** | Orientation & audio check | Step 1: watch welcome video (required checkbox). Step 2: speaker + mic test. Step 3: enter code → connect. |
+| **Candidate** | Virtual interview | Live avatar (HeyGen), real-time transcript, in-call **Audio Controls** pill (mute, mic/speaker selection), 15‑min countdown and time-remaining notifications, “Your turn” prompt, Leave Interview → thank-you page. |
+| **Candidate** | Thank-you page | Shown after leaving; link back to home. |
+| **Admin** | Login & auth | Session-based admin login; roles: SUPER_ADMIN, ADMIN, OBSERVER, AUDITOR. Forgot/reset password via email (Resend). |
+| **Admin** | Register candidate | Form: name, email, job/requisition, deadline, resume text. Generates unique access code; confirmation screen with copy-to-clipboard; optional email to HR. |
+| **Admin** | Requisitions | Create and manage job requisitions (number, title, requirements, qualifications, skills). Job Analysis Instructions and LiveAvatar context per requisition. Deactivate requisitions. |
+| **Admin** | Live sessions | List active interviews; open **Live Observation** for a session. |
+| **Admin** | Live observation (TTS) | Real-time transcript; OpenAI TTS playback (Interviewer: Shimmer, Candidate: Marin). Play/pause, resume real-time, click a line to play from that line. Consecutive same-speaker segments merged for TTS within 5s. |
+| **Admin** | Developer tools | Super Admin: select interview, **Compile aggregated report**, **Trigger evaluation** (OpenAI), **Deliver report (email)**. **Pushover test** button to verify notifications. |
+| **Admin** | Settings | System instruction preface (AI evaluation); report delivery email (Resend recipient). |
+| **Admin** | Users | List users; add/edit/deactivate (Super Admin). |
+| **Backend** | Code validation | `POST /api/validate-code`: check code, deadline, 31‑min reuse from `started_at` (reuse allowed regardless of status). Pushover notification on code entry (optional). |
+| **Backend** | Transcript persistence | User/avatar segments sent to `POST /api/interviews/[id]/transcript` (debounced); stored in `transcript_segments`. |
+| **Backend** | Completion & report | On Leave or page unload: `POST /api/interviews/[id]/complete` → mark COMPLETED, aggregate data, run OpenAI evaluation, generate PDF, send via Resend. Completion can reprocess if code was reused within 31 min. |
 
-1. **Start interview** — User clicks **Start Interview**. The app requests a session token from `/api/token`, creates a `LiveAvatarSession` (HeyGen SDK) with voice chat enabled, and starts the session.
-2. **Avatar stream** — When the SDK fires `SESSION_STREAM_READY`, the app attaches the stream to a `<video>` element and attempts autoplay. If autoplay is blocked, the user can use **Force Play** from **Settings → Diagnostics**.
-3. **Live transcript** — User and avatar speech are transcribed in real time via `user.transcription` and `avatar.transcription` events and shown in the right-hand **Transcript** panel, with messages labeled by sender and auto-scrolling.
-4. **End session** — **Leave Interview** in the footer stops the session and returns the UI to idle.
+---
 
-### UI Structure
+## Candidate Flow (Detail)
 
-- **Header (sticky)**
-  - Left: WV Supply logo (`/wvs_logo.png`).
-  - Center: “Virtual Interview” title.
-  - Right: **Help** and **Settings** pills (only one popover open at a time).
+1. **Welcome (`/`)**  
+   - Step 1: Watch the welcome video; required checkbox to continue.  
+   - Step 2: Audio check (play test sound, test microphone).  
+   - Step 3: Enter interview code → validate → store `interview_id` and candidate name in sessionStorage → redirect to `/interview`.
 
-- **Help popover**
-  - Short instructions: speak to the avatar as to a person.
-  - HR contact for technical help: **(304) 399-4568** (clickable `tel:` link).
+2. **Interview (`/interview`)**  
+   - Gated by valid `interview_id` in sessionStorage; otherwise redirect to `/`.  
+   - Header: logo, **“[FirstName LastName]'s Virtual Interview”**, Help and Settings.  
+   - **Start Interview** → request token from `/api/token`, create HeyGen `LiveAvatarSession` with voice chat, start session.  
+   - When `SESSION_STREAM_READY`, attach stream to `<video>`, autoplay; overlay dismisses (tap to dismiss if autoplay blocked).  
+   - **Audio Controls** pill (bottom-left when session active): mute/unmute, “More” → microphone and speaker selection, Test audio devices. Mic/speaker changes apply in-call (HeyGen `voiceChat.setDevice`, `setSinkId` on video).  
+   - Live transcript (User / Avatar) in side panel; segments persisted via `/api/interviews/[id]/transcript`.  
+   - 15‑minute progress bar; 5 / 2 / 1 minute remaining notifications.  
+   - **Leave Interview** → stop session, call `/api/interviews/[id]/complete`, redirect to `/thank-you`.  
+   - If user closes tab without leaving, `pagehide` triggers completion so the report still runs.
 
-- **Settings popover**
-  - **Microphone** and **Speaker** dropdowns: enumerate devices after requesting mic permission and let the user choose input/output. (Selection is stored in React state; the HeyGen SDK uses default devices unless you pass constraints elsewhere.)
-  - **Diagnostics** button opens the diagnostics dialog.
+3. **Thank you (`/thank-you`)**  
+   - Confirmation and link back home.
 
-- **Main content**
-  - **Video stage:** Aspect-ratio box with the avatar video; when the stream is not active, a status overlay shows (e.g. “Idle”, “Initializing…”, “Waiting for avatar stream…”, “Connected”, “Failed”).
-  - **Transcript panel:** Scrollable list of User/Avatar messages with distinct styling.
+---
 
-- **Footer**
-  - **Leave Interview** — stops the session; disabled when there is no active session.
+## Admin Portal (`/admin`)
 
-- **Diagnostics dialog** (modal)
-  - **Force Play** — programmatically calls `play()` on the video element and unmutes it (for when autoplay is blocked).
-  - **Diagnostic log** — scrollable log of debug messages produced by the app (e.g. “Starting…”, “Avatar stream ready”, “Attach completed”, errors).
+- **Login** (`/admin/login`), **Forgot password**, **Reset password** (email links).  
+- **Dashboard:** links to Register candidate, Requisitions, Live sessions, Developer tools, Settings, Users.  
+- **Register candidate:** form → creates interview row, generates access code; confirmation with copy code.  
+- **Requisitions:** list, create, edit (incl. Job Analysis Instructions, LiveAvatar context), deactivate.  
+- **Live sessions:** list active interviews → open **Live Observation** for one.  
+- **Live Observation** (`/admin/live/[id]`): real-time transcript; TTS playback (OpenAI: gpt-4o-mini-tts, Shimmer/Marin, 1.25×). Play/pause, Resume real-time, click line to play from that line; device list in popover.  
+- **Developer tools** (`/admin/developer`): Super Admin only. Select interview → Compile report, Run evaluation, Deliver report (email), Send test Pushover notification.  
+- **Settings:** Instruction preface (text for AI evaluation), Report delivery email.  
+- **Users:** list, add, edit, deactivate (Super Admin).
 
-### API Routes
+---
 
-| Route           | Method | Purpose |
-|----------------|--------|--------|
-| `/api/token`   | POST   | Requests a Live Avatar **session token** from HeyGen. Uses `LIVEAVATAR_API_KEY`, sandbox or production avatar ID, and per-requisition `liveavatar_context_id` when an interview is provided. Returns the token (and any wrapper) as returned by the Live Avatar API. |
-| `/api/start`   | POST   | Gets a token and then calls Live Avatar’s **start** endpoint. Response includes `session_token`, `livekit_url`, and `livekit_client_token` for use with LiveKit or other tooling. The main UI uses `/api/token` only; `/api/start` is available for workflows that need the start response. |
+## Post-Interview Pipeline
 
-- **Token request:** `POST https://api.liveavatar.com/v1/sessions/token` with `X-API-KEY`, body: `mode: 'FULL'`, `is_sandbox`, `avatar_id`, and optional `avatar_persona: { context_id }` from the interview’s requisition.
-- **Start request:** `POST https://api.liveavatar.com/v1/sessions/start` with `Authorization: Bearer <session_token>`.
+When a candidate leaves (or tab closes after session start):
 
-### Session & SDK Usage
+1. **Complete** (`POST /api/interviews/[id]/complete`): set interview status to COMPLETED, `ended_at`, `duration_seconds`.  
+2. **Aggregate:** candidate, requisition, system instructions, job analysis instructions, transcript, resume → single prompt (see `lib/aggregate-interview-data.ts`, `buildAggregatedPrompt`).  
+3. **Store:** `interview_reports.aggregated_prompt_text` and row for the interview.  
+4. **Evaluate:** OpenAI (default `gpt-5-mini`, configurable) → structured screening report; store in `interview_reports.ai_evaluation_json`.  
+5. **Report:** PDF generated (Puppeteer/Chromium): AI Evaluation → Resume → Transcript.  
+6. **Deliver:** Email PDF via Resend to the address in Admin → Settings (report delivery email).
 
-- **Library:** `@heygen/liveavatar-web-sdk` — `LiveAvatarSession(sessionToken, { voiceChat: true })`.
-- **Events used:** `SessionEvent.SESSION_STREAM_READY`, `user.transcription`, `avatar.transcription`.
-- **Attachment:** When `streamReady` is true, `session.attach(videoRef.current)` is called; then the video element’s `play()` is triggered (with **Force Play** as fallback if autoplay fails).
+If the same code is used again within **31 minutes** of `started_at`, the code is accepted and a later completion **reprocesses** (aggregate + evaluate + report) with the new transcript/data.
 
-### Design & Theming
+---
 
-- **Design system** is defined in `app/globals.css` with CSS variables, e.g.:
-  - `--bg-color`, `--card-bg`, `--text-primary`, `--text-secondary`, `--accent-red`
-  - `--radius-md`, `--radius-lg`, `--radius-pill`, `--shadow-sm`, `--shadow-md`, `--transition`
-- **Layout:** Responsive; at `md` and up, video is ~70vw and transcript sits to the right; nav uses a sticky header and pill-style buttons.
-- **Fonts:** Root layout loads Geist and Geist Mono via `next/font`; page body uses system UI fonts for the interview UI.
+## API Routes (Reference)
+
+| Route | Method | Purpose |
+|-------|--------|---------|
+| **Candidate & session** | | |
+| `/api/validate-code` | POST | Validate interview code; return interviewId, candidate name. Optional Pushover on entry. |
+| `/api/token` | POST | HeyGen Live Avatar session token (optional `interviewId` for persona/context). |
+| `/api/start` | POST | Token + start session (LiveKit fields); UI uses token only. |
+| `/api/interviews/[id]/start` | POST | Mark interview started (`started_at`, status ACTIVE). |
+| `/api/interviews/[id]/transcript` | POST | Append transcript segments (debounced from client). |
+| `/api/interviews/[id]/complete` | POST | Mark COMPLETED, aggregate, evaluate, PDF, email. |
+| `/api/interviews/[id]/evaluate` | POST | Run OpenAI evaluation only. |
+| `/api/interviews/[id]/deliver` | POST | Send report email (PDF) via Resend. |
+| **Admin auth** | | |
+| `/api/auth/login` | POST | Admin login. |
+| `/api/auth/logout` | POST | Logout. |
+| `/api/auth/session` | GET | Current session / role. |
+| `/api/auth/forgot-password` | POST | Request reset email. |
+| `/api/auth/reset-password/validate` | POST | Validate reset token. |
+| `/api/auth/reset-password` | POST | Set new password. |
+| **Admin data** | | |
+| `/api/admin/candidates` | POST | Register candidate (create interview + code). |
+| `/api/admin/requisitions` | GET, POST | List/create requisitions. |
+| `/api/admin/requisitions/[id]` | GET, PUT | Get/update requisition. |
+| `/api/admin/requisitions/list` | GET | List requisitions (e.g. dropdowns). |
+| `/api/admin/requisitions/[id]/deactivate` | POST | Deactivate requisition. |
+| `/api/admin/live/sessions` | GET | List active interviews for live view. |
+| `/api/admin/live/observe/[id]/meta` | GET | Interview metadata for observation. |
+| `/api/admin/live/observe/[id]/transcript` | GET | Poll transcript segments (after/after_id). |
+| `/api/admin/live/tts` | POST | OpenAI TTS (text, speaker → audio). |
+| `/api/admin/developer/interviews` | GET | List interviews (Super Admin). |
+| `/api/admin/developer/compile-report` | POST | Build aggregated report for an interview. |
+| `/api/admin/developer/evaluate` | POST | Run AI evaluation for an interview. |
+| `/api/admin/developer/deliver` | POST | Send report email for an interview. |
+| `/api/admin/developer/pushover-test` | POST | Send test Pushover notification. |
+| `/api/admin/settings/instruction-preface` | GET, PUT | System instruction for AI. |
+| `/api/admin/settings/report-delivery-email` | GET, PUT | Report recipient email. |
+| `/api/admin/users` | GET, POST | List/create users. |
+| `/api/admin/users/[id]` | GET, PUT | Get/update user. |
+| `/api/admin/users/[id]/deactivate` | POST | Deactivate user. |
+| **Dev** | | |
+| `/api/dev/create-test-interview` | POST | Create test interview; return access code. |
+
+---
+
+## Environment Variables
+
+Create `.env.local` in the project root. See `.env.example` for a template.
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `LIVEAVATAR_API_KEY` | Yes | HeyGen Live Avatar API key. |
+| `LIVEAVATAR_SANDBOX_MODE` | No | `YES` = sandbox avatar (no credits, ~1 min); `NO` = production. |
+| `NEXT_PUBLIC_AVATAR_ID` | Yes (prod) | HeyGen avatar ID (sandbox or production). |
+| `sql_DATABASE_URL` | Yes* | Neon PostgreSQL connection string. Required for codes, admin, transcripts, reports. |
+| `ADMIN_SESSION_SECRET` | Yes* | Cookie signing secret (min 16 chars) for admin sessions. |
+| `RESEND_API_KEY` | Yes** | Resend API key (forgot-password, report delivery). |
+| `RESEND_FROM_EMAIL` | Yes** | From address (must be verified in Resend). |
+| `NEXT_PUBLIC_APP_URL` | No | Base URL for reset links (e.g. production URL). |
+| `OPENAI_API_KEY` | Yes*** | OpenAI API key for screening evaluation. |
+| `OPENAI_SCREENING_MODEL` | No | Model name (default: gpt-5-mini). |
+| `CHROMIUM_REMOTE_EXEC_PATH` | Yes**** | Vercel: URL to Chromium pack for PDF (see `.env.example`). |
+| `PUSHOVER_API_TOKEN` | No | Pushover app token (optional code-entry notifications). |
+| `PUSHOVER_GROUP_KEY` | No | Pushover group key (optional). |
+
+\* Required for interview codes and admin.  
+\** Required for forgot-password and report email delivery.  
+\*** Required for AI evaluation and report content.  
+\**** Required for PDF generation on Vercel; not needed for local dev.
 
 ---
 
@@ -77,90 +164,99 @@ A Next.js web application that delivers a **virtual interview** experience for W
 
 ### Prerequisites
 
-- Node.js (version compatible with Next.js 16)
-- A HeyGen Live Avatar API key (sandbox or production)
+- Node.js ≥ 20.9.0  
+- A HeyGen Live Avatar API key and avatar ID  
+- (Recommended) Neon PostgreSQL and Resend for full flow
 
-### Environment Variables
+### Database
 
-Create `.env.local` in the project root:
+1. Create a Neon project and run the schema once. See **`schema/README.md`**.  
+2. Run migrations in order: `001_initial.sql`, then `002_password_reset.sql`, `003_requisition_context.sql`, `004_aggregated_prompt.sql`, `005_job_analysis_instructions.sql` as applicable.  
+3. Set `sql_DATABASE_URL` in `.env.local`.  
+4. Run `npm run seed` to create a seed admin user and test interviews (admin: seed@wvsupply.local / changeme; test code e.g. TEST-2026).
 
-| Variable                   | Required | Description |
-|---------------------------|----------|-------------|
-| `LIVEAVATAR_API_KEY`      | Yes      | HeyGen Live Avatar API key. |
-| `sql_DATABASE_URL`        | No*      | Neon PostgreSQL connection string. Required for interview codes, transcripts, admin, and reports. See `schema/README.md` to run the schema. |
-| `ADMIN_SESSION_SECRET`    | No*      | Secret for signing admin session cookies (at least 16 characters). Required for `/admin` login. |
-
-\* Required once you implement Phase 1 (interview codes, persistence). Until then, the app runs without a database.
-
-**Database (Neon):** To use interview codes, transcripts, or admin features, create a Neon project, run `schema/001_initial.sql` once (see `schema/README.md`), and set `sql_DATABASE_URL` in `.env.local`. The app uses `lib/db.ts` for server-side queries. Set `ADMIN_SESSION_SECRET` (at least 16 chars) for admin login. Run `npm run seed` to create a seed admin user (login: seed@wvsupply.local / changeme) and test interview codes.
-
-### Install and Run
+### Install and run
 
 ```bash
 npm install
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000). Use **Start Interview** to begin a session (browser will prompt for microphone access if needed).
+Open [http://localhost:3000](http://localhost:3000). Use a test interview code (from seed or `/api/dev/create-test-interview`) on the welcome page to reach the interview.
 
-### Build for Production
+### Build for production
 
 ```bash
 npm run build
 npm start
 ```
 
+For PDF report generation on Vercel, set `CHROMIUM_REMOTE_EXEC_PATH` to the Chromium pack URL matching your `@sparticuz/chromium` version.
+
 ---
 
-## Project Structure (Relevant to This App)
+## Project Structure (Key Paths)
 
 ```
 app/
-  layout.tsx          # Root layout, metadata, Geist fonts, globals.css
-  page.tsx             # Welcome page (interview code entry)
-  globals.css          # Tailwind + design tokens and component styles
+  layout.tsx              # Root layout, metadata, fonts, globals.css
+  page.tsx                # Welcome: orientation video, audio check, code entry
   interview/
-    page.tsx           # Virtual Interview UI (gated by valid code)
-  api/
-    token/route.ts     # POST: get Live Avatar session token
-    start/route.ts     # POST: get token + start session, return LiveKit fields
-    validate-code/route.ts  # POST: validate interview code, return interviewId
-    dev/create-test-interview/route.ts  # POST (dev only): create test interview, return accessCode
+    page.tsx              # Virtual interview UI (gated by valid code)
+    AudioControlsPill.tsx # In-call mute + mic/speaker selection (pill UI)
+  admin/
+    layout.tsx            # Admin layout (auth check)
+    page.tsx              # Admin dashboard
+    login/                # Login, forgot-password, reset-password
+    register/page.tsx     # Register candidate
+    requisitions/         # Requisitions list and management
+    live/page.tsx         # Live sessions list
+    live/[id]/page.tsx    # Live observation (transcript + TTS)
+    developer/page.tsx   # Developer tools (compile, evaluate, deliver, Pushover test)
+    settings/page.tsx    # Instruction preface, report delivery email
+    users/               # User management
+  api/                    # See “API Routes” above
+  globals.css             # Tailwind + design tokens
 lib/
-  db.ts                # Neon serverless SQL client (server-side only)
+  db.ts                   # Neon serverless SQL client
+  aggregate-interview-data.ts  # Build aggregated prompt for evaluation
+  openai-evaluation.ts   # OpenAI screening evaluation
+  report-delivery.ts     # PDF generation + Resend email
+  pushover.ts            # Pushover notifications
+  admin-auth.ts          # Admin session and role checks
 schema/
-  001_initial.sql      # Initial DB schema (users, requisitions, interviews, etc.)
-  README.md            # How to run the schema on Neon
+  001_initial.sql        # Core schema (users, requisitions, interviews, transcripts, reports, etc.)
+  README.md              # How to run schema and migrations
+docs/
+  phase-6-2-ai-evaluation-spec.md  # AI evaluation output spec
 public/
-  wvs_logo.png         # WV Supply logo in header
+  wvs_logo.png
+  speaker_test.mp3       # Audio check sample
 ```
-
-The welcome page is `app/page.tsx`; the interview UI is `app/interview/page.tsx` (gated by a valid interview code). API keys and server-only config stay in the API routes and environment variables.
-
-**Test interview code:** Run `npm run seed` (with `sql_DATABASE_URL` set and schema applied) to create a test interview with code **TEST-2026**. In development you can also `POST /api/dev/create-test-interview` to get a new code.
 
 ---
 
-## Dependencies (Summary)
+## Design & Theming
 
-- **next** — App Router, server and client components, API routes.
-- **react** / **react-dom** — UI.
-- **@heygen/liveavatar-web-sdk** — Live Avatar session, stream attachment, transcription events.
-- **livekit-client** — Listed in package.json (e.g. for possible future LiveKit use); the current UI does not use it directly.
-- **tailwindcss** — Utility-first styling; design system is extended in `globals.css`.
+- **Design system** in `app/globals.css`: `--bg-color`, `--card-bg`, `--text-primary`, `--text-secondary`, `--accent-red`, `--radius-*`, `--shadow-*`, `--bg-general`, `--border-line`, etc.  
+- **Layout:** Sticky header, responsive main (video + transcript), pill-style nav and Audio Controls.  
+- **Audio Controls pill:** Frosted pill (`bg-[rgba(255,255,255,0.25)]`, `backdrop-blur-sm`); 40×40 circular buttons; device list and setSinkId only when user opens popover to avoid competing with HeyGen for mic/video on session start.
 
 ---
 
 ## Notes for Developers
 
-- **Sandbox:** The app is configured for HeyGen **sandbox** (`is_sandbox: true`) and a fixed sandbox avatar ID in the token/start routes. For production, switch to a non-sandbox avatar and secure API keys and env handling.
-- **Audio devices:** Microphone and speaker choices in Settings are stored in component state. The HeyGen SDK uses the browser’s default devices unless you pass `MediaStreamConstraints` or equivalent when creating or configuring the session; wiring selected device IDs into the SDK would be a separate step.
-- **Transcripts:** Transcript text comes from the SDK events; there is no separate persistence. Refreshing or leaving the page clears the transcript.
-- **Metadata:** Default Next.js metadata in `layout.tsx` (“Create Next App”) should be updated (e.g. title “Virtual Interview | WV Supply”, description) for production.
+- **Sandbox vs production:** Toggle `LIVEAVATAR_SANDBOX_MODE` and set `NEXT_PUBLIC_AVATAR_ID` for the correct avatar.  
+- **Interview code reuse:** Same code is allowed within **31 minutes** of `started_at` regardless of status (e.g. COMPLETED); completion then reprocesses with latest transcript.  
+- **Transcript persistence:** Segments are sent to the API with debouncing and stored in `transcript_segments`; used for live observation, aggregation, and the report.  
+- **TTS (live observation):** OpenAI TTS (gpt-4o-mini-tts); device list and playback are deferred until popover open / after stream ready to avoid affecting the candidate’s avatar stream.  
+- **Metadata:** Update default metadata in `layout.tsx` (title, description) for production.
 
 ---
 
 ## Learn More
 
-- [Next.js Documentation](https://nextjs.org/docs)
-- [HeyGen Live Avatar](https://www.heygen.com/) — product and API docs for avatar and session configuration.
+- [Next.js Documentation](https://nextjs.org/docs)  
+- [HeyGen Live Avatar](https://www.heygen.com/) — avatar and session API  
+- [Neon](https://neon.tech/docs) — serverless Postgres  
+- [Resend](https://resend.com/docs) — email and domain verification  
