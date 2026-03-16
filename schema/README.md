@@ -42,5 +42,6 @@ psql "$sql_DATABASE_URL" -f schema/001_initial.sql
 - Run **once** on a **new** database. The script creates types and tables; it is not idempotent (e.g. `CREATE TYPE` will fail if the type already exists).  
 - For future changes, add new migration files (e.g. `002_add_foo.sql`) and run them in order.
 - **Forgot password:** After `001_initial.sql`, run `002_password_reset.sql` once to add the `password_reset_tokens` table used by the admin forgot-password flow.
-- **Requisition LiveAvatar context:** Run `003_requisition_context.sql` once to add `liveavatar_context_id` to requisitions (used for avatar persona per job when candidates start an interview).  
+- **Requisition LiveAvatar context:** Run `003_requisition_context.sql` once to add `liveavatar_context_id` to requisitions (used for avatar persona per job when candidates start an interview).
+- **Candidate feedback:** Run `006_candidate_feedback.sql` once to add the `candidate_feedback` table (optional post-interview survey on the thank-you page).
 - The app uses `lib/db.ts` (Neon serverless driver) for all queries; set `sql_DATABASE_URL` in `.env.local` for API routes and Server Actions that need the DB.
