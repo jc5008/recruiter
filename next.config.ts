@@ -1,6 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  distDir: process.env.NEXT_DIST_DIR || ".next",
   reactStrictMode: false,
   // Required for PDF generation on Vercel: Chromium is loaded from node_modules, not bundled.
   serverExternalPackages: ["puppeteer-core", "@sparticuz/chromium"],

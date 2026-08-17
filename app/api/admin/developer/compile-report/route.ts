@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server';
 import { NextRequest } from 'next/server';
 import { requireSuperAdmin } from '@/lib/admin-auth';
-import { aggregateInterviewData, buildAggregatedPrompt } from '@/lib/aggregate-interview-data';
 import { getSql } from '@/lib/db';
+import { compileInterviewReport } from '@/lib/post-interview-report';
 
 /**
  * Developer tool: Compile aggregated report for an interview.
@@ -35,54 +35,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Interview not found' }, { status: 404 });
     }
 
-    // Aggregate all data for AI evaluation
-    let aggregatedData;
-    let aggregatedPrompt;
-    try {
-      aggregatedData = await aggregateInterviewData(interviewId);
-      aggregatedPrompt = buildAggregatedPrompt(aggregatedData);
-    } catch (aggErr) {
-      console.error('Failed to aggregate interview data:', aggErr);
-      return NextResponse.json(
-        { error: `Failed to aggregate data: ${aggErr instanceof Error ? aggErr.message : 'Unknown error'}` },
-        { status: 500 }
-      );
-    }
-
-    // Create or update interview_reports row with aggregated prompt
-    try {
-      await sql`
-        INSERT INTO interview_reports (
-          interview_id,
-          aggregated_prompt_text,
-          email_delivery_status
-        )
-        VALUES (
-          ${interviewId},
-          ${aggregatedPrompt},
-          'PENDING'
-        )
-        ON CONFLICT (interview_id) DO UPDATE SET
-          aggregated_prompt_text = ${aggregatedPrompt}
-      `;
-    } catch (insertErr) {
-      console.error('Failed to insert/update interview_reports:', insertErr);
-      // Check if column exists (migration might not have been run)
-      if (insertErr instanceof Error && insertErr.message.includes('aggregated_prompt_text')) {
-        return NextResponse.json(
-          { error: 'Database migration required: Run migration 004 to add aggregated_prompt_text column' },
-          { status: 500 }
-        );
-      }
-      throw insertErr;
-    }
+    const compiled = await compileInterviewReport(interviewId);
 
     return NextResponse.json({
       ok: true,
       interview_id: interviewId,
-      candidate_name: `${aggregatedData.interview.candidate_first_name} ${aggregatedData.interview.candidate_last_name}`,
-      transcript_segments: aggregatedData.transcript.length,
-      prompt_length: aggregatedPrompt.length,
+      candidate_name: compiled.candidate_name,
+      transcript_segments: compiled.transcript_segments,
+      prompt_length: compiled.prompt_length,
       compiled_at: new Date().toISOString(),
     });
   } catch (err) {

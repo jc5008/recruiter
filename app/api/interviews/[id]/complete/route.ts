@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server';
 import { getSql } from '@/lib/db';
-import { aggregateInterviewData, buildAggregatedPrompt } from '@/lib/aggregate-interview-data';
-import { runEvaluation } from '@/lib/openai-evaluation';
-import { sendReport } from '@/lib/report-delivery';
+import {
+  processPostInterviewReport,
+  type ReportProcessingResult,
+} from '@/lib/post-interview-report';
 
 /**
  * Phase 6.1: Mark interview as completed and aggregate data for AI evaluation.
@@ -64,61 +65,22 @@ export async function POST(
       WHERE id = ${interviewId}
     `;
 
-    // Aggregate all data for AI evaluation
-    let aggregatedData;
-    let aggregatedPrompt;
+    // Aggregate, evaluate, generate PDF, and deliver through the shared report pipeline.
+    // Candidate completion keeps its existing contract: downstream evaluation or
+    // delivery failures are logged but do not make the completed interview fail.
+    let reportResult: ReportProcessingResult | null = null;
     try {
-      aggregatedData = await aggregateInterviewData(interviewId);
-      aggregatedPrompt = buildAggregatedPrompt(aggregatedData);
-    } catch (aggErr) {
-      console.error('Failed to aggregate interview data:', aggErr);
-      return NextResponse.json(
-        { error: `Failed to aggregate data: ${aggErr instanceof Error ? aggErr.message : 'Unknown error'}` },
-        { status: 500 }
-      );
-    }
-
-    // Create or update interview_reports row with aggregated prompt
-    try {
-      await sql`
-        INSERT INTO interview_reports (
-          interview_id,
-          aggregated_prompt_text,
-          email_delivery_status
-        )
-        VALUES (
-          ${interviewId},
-          ${aggregatedPrompt},
-          'PENDING'
-        )
-        ON CONFLICT (interview_id) DO UPDATE SET
-          aggregated_prompt_text = ${aggregatedPrompt}
-      `;
-    } catch (insertErr) {
-      console.error('Failed to insert/update interview_reports:', insertErr);
-      // Check if column exists (migration might not have been run)
-      if (insertErr instanceof Error && insertErr.message.includes('aggregated_prompt_text')) {
-        return NextResponse.json(
-          { error: 'Database migration required: Run migration 004 to add aggregated_prompt_text column' },
-          { status: 500 }
-        );
+      reportResult = await processPostInterviewReport(interviewId);
+      if (!reportResult.ok && reportResult.failed_stage === 'AGGREGATING') {
+        return NextResponse.json({ error: reportResult.error || 'Failed to aggregate report data' }, { status: 500 });
       }
-      throw insertErr;
-    }
-
-    // Phase 6.2 & 6.3: Run AI evaluation then send PDF report (fire after success; don't fail completion)
-    try {
-      const evalResult = await runEvaluation(interviewId);
-      if (evalResult.ok) {
-        const deliverResult = await sendReport(interviewId);
-        if (!deliverResult.ok) {
-          console.error('Post-complete report delivery failed:', deliverResult.error);
-        }
-      } else {
-        console.error('Post-complete evaluation failed:', evalResult.error);
+      if (!reportResult.ok) {
+        console.error(`Post-complete report pipeline failed at ${reportResult.failed_stage}`);
       }
-    } catch (postErr) {
-      console.error('Post-complete evaluation/delivery error:', postErr);
+    } catch {
+      // Preserve the established candidate contract after the interview has been
+      // marked complete, even for an unexpected downstream orchestration error.
+      console.error('Post-complete report pipeline failed unexpectedly');
     }
 
     return NextResponse.json({
@@ -127,8 +89,8 @@ export async function POST(
       status: 'COMPLETED',
       ended_at: now.toISOString(),
       duration_seconds: durationSeconds,
-      transcript_segments: aggregatedData.transcript.length,
-      has_aggregated_prompt: true,
+      transcript_segments: reportResult?.compiled?.transcript_segments ?? 0,
+      has_aggregated_prompt: Boolean(reportResult?.compiled),
     });
   } catch (err) {
     if (err instanceof Error && err.message.includes('sql_DATABASE_URL')) {

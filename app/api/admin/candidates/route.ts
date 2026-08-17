@@ -33,6 +33,9 @@ export async function GET(request: NextRequest) {
       FROM interviews i
       LEFT JOIN requisitions r ON r.id = i.requisition_id
       WHERE ${jobTitleFilter ? sql`r.job_title = ${jobTitleFilter}` : sql`TRUE`}
+        AND NOT EXISTS (
+          SELECT 1 FROM admin_qa_report_runs q WHERE q.interview_id = i.id
+        )
     `;
 
     type Row = {

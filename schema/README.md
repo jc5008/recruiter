@@ -44,4 +44,5 @@ psql "$sql_DATABASE_URL" -f schema/001_initial.sql
 - **Forgot password:** After `001_initial.sql`, run `002_password_reset.sql` once to add the `password_reset_tokens` table used by the admin forgot-password flow.
 - **Requisition LiveAvatar context:** Run `003_requisition_context.sql` once to add `liveavatar_context_id` to requisitions (used for avatar persona per job when candidates start an interview).
 - **Candidate feedback:** Run `006_candidate_feedback.sql` once to add the `candidate_feedback` table (optional post-interview survey on the thank-you page).
+- **Post-Interview Report QA:** Run `007_admin_qa_report_runs.sql` once to add immutable SUPER_ADMIN QA runs and the report instruction snapshot. Apply this additive migration before deploying the QA harness code.
 - The app uses `lib/db.ts` (Neon serverless driver) for all queries; set `sql_DATABASE_URL` in `.env.local` for API routes and Server Actions that need the DB.

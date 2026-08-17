@@ -11,6 +11,7 @@
  */
 
 import { getSql } from './db';
+import type { QaReportInput } from './report-qa';
 
 export type AggregatedInterviewData = {
   interview: {
@@ -45,6 +46,52 @@ export type AggregatedInterviewData = {
  */
 export async function aggregateInterviewData(interviewId: string): Promise<AggregatedInterviewData> {
   const sql = getSql();
+
+  // QA runs use their immutable input snapshot as the source of truth. The
+  // synthetic interview only exists so the ordinary report persistence and
+  // delivery pipeline can operate against its normal interview foreign key.
+  const qaRows = await sql`
+    SELECT input_json
+    FROM admin_qa_report_runs
+    WHERE interview_id = ${interviewId}
+    LIMIT 1
+  `;
+  const qaRow = qaRows[0] as { input_json: QaReportInput | string } | undefined;
+  if (qaRow) {
+    const input = typeof qaRow.input_json === 'string'
+      ? JSON.parse(qaRow.input_json) as QaReportInput
+      : qaRow.input_json;
+    const startedAt = input.interview.started_at ? new Date(input.interview.started_at) : null;
+    const endedAt = input.interview.ended_at ? new Date(input.interview.ended_at) : null;
+    const transcriptBase = startedAt?.getTime() ?? Date.now();
+    return {
+      interview: {
+        id: interviewId,
+        candidate_first_name: input.candidate.first_name,
+        candidate_last_name: input.candidate.last_name,
+        candidate_email: input.candidate.email,
+        resume_text: input.candidate.resume_text || null,
+        requisition_id: null,
+        started_at: startedAt,
+        ended_at: endedAt,
+        duration_seconds: input.interview.duration_seconds,
+      },
+      requisition: {
+        job_title: input.job.title || null,
+        job_requirements: input.job.requirements || null,
+        qualifications: input.job.qualifications || null,
+        skills: input.job.skills || null,
+        job_analysis_instructions: input.job.job_analysis_instructions || null,
+      },
+      transcript: input.transcript.map((segment, index) => ({
+        speaker: segment.speaker,
+        content: segment.content,
+        timestamp_offset_ms: segment.timestamp_offset_ms,
+        created_at: new Date(transcriptBase + (segment.timestamp_offset_ms ?? index)),
+      })),
+      system_instruction_preface: input.system_instruction_preface,
+    };
+  }
 
   // Fetch interview with requisition join
   const interviewRows = await sql`

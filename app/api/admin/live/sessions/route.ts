@@ -19,10 +19,20 @@ export async function GET(request: NextRequest) {
       FROM interviews i
       LEFT JOIN requisitions r ON r.id = i.requisition_id
       WHERE i.status = 'ACTIVE' AND i.started_at IS NOT NULL
+        AND NOT EXISTS (
+          SELECT 1 FROM admin_qa_report_runs q WHERE q.interview_id = i.id
+        )
       ORDER BY i.started_at DESC
-    `;
+    ` as Array<{
+      id: string;
+      candidate_first_name: string;
+      candidate_last_name: string;
+      status: string;
+      started_at: string | null;
+      job_title: string | null;
+    }>;
     return NextResponse.json({
-      sessions: rows.map((r: { id: string; candidate_first_name: string; candidate_last_name: string; status: string; started_at: string | null; job_title: string | null }) => ({
+      sessions: rows.map((r) => ({
         id: r.id,
         candidate_first_name: r.candidate_first_name,
         candidate_last_name: r.candidate_last_name,

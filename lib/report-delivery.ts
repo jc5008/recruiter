@@ -8,6 +8,8 @@
 import { Resend } from 'resend';
 import { marked } from 'marked';
 import { getSql } from './db';
+import { aggregateInterviewData } from './aggregate-interview-data';
+import type { Browser } from 'puppeteer-core';
 
 const REPORT_DELIVERY_EMAIL_KEY = 'report_delivery_email';
 
@@ -35,17 +37,20 @@ async function getReportDeliveryEmail(): Promise<string> {
 /**
  * Builds full HTML for the report PDF: AI Evaluation + Candidate Resume + Transcript.
  */
-async function buildReportHtml(
+export async function buildReportHtml(
   reportMarkdown: string,
   resumeText: string | null,
   transcript: Array<{ speaker: string; content: string; timestamp_offset_ms: number | null }>
 ): Promise<string> {
   let aiSectionHtml: string;
   try {
-    const result = marked(reportMarkdown);
+    const renderer = new marked.Renderer();
+    renderer.html = ({ text }) => escapeHtml(text);
+    renderer.image = ({ text }) => `[Image omitted: ${escapeHtml(text)}]`;
+    const result = marked(reportMarkdown, { renderer });
     aiSectionHtml = typeof result === 'string' ? result : await result;
   } catch {
-    aiSectionHtml = reportMarkdown.replace(/\n/g, '<br>\n');
+    aiSectionHtml = escapeHtml(reportMarkdown).replace(/\n/g, '<br>\n');
   }
 
   const resumeSectionHtml = resumeText?.trim()
@@ -112,7 +117,7 @@ async function buildReportHtml(
  */
 async function htmlToPdfBuffer(html: string): Promise<Buffer> {
   const isVercel = process.env.VERCEL === '1';
-  let browser: Awaited<ReturnType<Awaited<ReturnType<typeof import('puppeteer')>>['launch']>>;
+  let browser: Browser;
 
   if (isVercel) {
     const puppeteer = await import('puppeteer-core');
@@ -124,9 +129,8 @@ async function htmlToPdfBuffer(html: string): Promise<Buffer> {
       : await chromium.default.executablePath();
     browser = await puppeteer.default.launch({
       args: chromium.default.args,
-      defaultViewport: chromium.default.defaultViewport,
       executablePath,
-      headless: chromium.default.headless ?? true,
+      headless: true,
     });
   } else {
     const puppeteer = await import('puppeteer');
@@ -138,7 +142,17 @@ async function htmlToPdfBuffer(html: string): Promise<Buffer> {
 
   try {
     const page = await browser.newPage();
-    await page.setContent(html, { waitUntil: 'networkidle0' });
+    await page.setJavaScriptEnabled(false);
+    await page.setRequestInterception(true);
+    page.on('request', (request) => {
+      const url = request.url();
+      if (url === 'about:blank' || url.startsWith('data:')) {
+        void request.continue();
+      } else {
+        void request.abort();
+      }
+    });
+    await page.setContent(html, { waitUntil: 'load' });
     const pdfBuffer = await page.pdf({
       format: 'A4',
       printBackground: true,
@@ -155,7 +169,10 @@ async function htmlToPdfBuffer(html: string): Promise<Buffer> {
  * PDF content order: AI Evaluation (current format) | Candidate Resume | Transcript.
  * Requires: RESEND_API_KEY, RESEND_FROM_EMAIL (or RESEND_FROM); report_delivery_email in system_settings.
  */
-export async function sendReport(interviewId: string): Promise<DeliverResult> {
+export async function sendReport(
+  interviewId: string,
+  options: { idempotencyKey?: string } = {}
+): Promise<DeliverResult> {
   const apiKey = process.env.RESEND_API_KEY;
   const fromAddress = process.env.RESEND_FROM_EMAIL ?? process.env.RESEND_FROM;
 
@@ -174,12 +191,8 @@ export async function sendReport(interviewId: string): Promise<DeliverResult> {
   const sql = getSql();
 
   const reportRows = await sql`
-    SELECT r.ai_evaluation_json,
-           i.candidate_first_name, i.candidate_last_name, i.resume_text,
-           req.job_title
+    SELECT r.ai_evaluation_json
     FROM interview_reports r
-    JOIN interviews i ON i.id = r.interview_id
-    LEFT JOIN requisitions req ON req.id = i.requisition_id
     WHERE r.interview_id = ${interviewId}
     LIMIT 1
   `;
@@ -190,10 +203,6 @@ export async function sendReport(interviewId: string): Promise<DeliverResult> {
 
   const row = reportRows[0] as {
     ai_evaluation_json: { report_markdown?: string } | null;
-    candidate_first_name: string;
-    candidate_last_name: string;
-    resume_text: string | null;
-    job_title: string | null;
   };
 
   const reportMarkdown =
@@ -205,20 +214,14 @@ export async function sendReport(interviewId: string): Promise<DeliverResult> {
     return { ok: false, error: 'No report content. Run evaluation (6.2) first.' };
   }
 
-  const transcriptRows = await sql`
-    SELECT speaker, content, timestamp_offset_ms
-    FROM transcript_segments
-    WHERE interview_id = ${interviewId}
-    ORDER BY created_at ASC, timestamp_offset_ms ASC NULLS LAST
-  `;
-
-  const transcript = transcriptRows.map((t) => ({
-    speaker: t.speaker as string,
-    content: t.content as string,
-    timestamp_offset_ms: t.timestamp_offset_ms as number | null,
+  const aggregatedData = await aggregateInterviewData(interviewId);
+  const transcript = aggregatedData.transcript.map((segment) => ({
+    speaker: segment.speaker,
+    content: segment.content,
+    timestamp_offset_ms: segment.timestamp_offset_ms,
   }));
 
-  const html = await buildReportHtml(reportMarkdown, row.resume_text ?? null, transcript);
+  const html = await buildReportHtml(reportMarkdown, aggregatedData.interview.resume_text, transcript);
 
   let pdfBuffer: Buffer;
   try {
@@ -236,25 +239,28 @@ export async function sendReport(interviewId: string): Promise<DeliverResult> {
     };
   }
 
-  const candidateName = `${row.candidate_first_name} ${row.candidate_last_name}`.trim() || 'Candidate';
-  const jobTitle = row.job_title?.trim() || 'Position';
+  const candidateName = `${aggregatedData.interview.candidate_first_name} ${aggregatedData.interview.candidate_last_name}`.trim() || 'Candidate';
+  const jobTitle = aggregatedData.requisition?.job_title?.trim() || 'Position';
   const subject = `Post-Interview Report: ${candidateName} – ${jobTitle}`;
 
   const resend = new Resend(apiKey);
 
   try {
-    const { data, error } = await resend.emails.send({
-      from: fromAddress.trim(),
-      to: [toEmail],
-      subject,
-      html: '<p>Please find the post-interview report attached (PDF: AI Evaluation, Candidate Resume, Transcript).</p>',
-      attachments: [
-        {
-          filename: `post-interview-report-${interviewId.slice(0, 8)}.pdf`,
-          content: pdfBuffer,
-        },
-      ],
-    });
+    const { data, error } = await resend.emails.send(
+      {
+        from: fromAddress.trim(),
+        to: [toEmail],
+        subject,
+        html: '<p>Please find the post-interview report attached (PDF: AI Evaluation, Candidate Resume, Transcript).</p>',
+        attachments: [
+          {
+            filename: `post-interview-report-${interviewId.slice(0, 8)}.pdf`,
+            content: pdfBuffer,
+          },
+        ],
+      },
+      options.idempotencyKey ? { idempotencyKey: options.idempotencyKey } : undefined
+    );
 
     if (error) {
       console.error('Resend send error:', error);

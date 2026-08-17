@@ -1,6 +1,5 @@
-import { redirect } from 'next/navigation';
 import Link from 'next/link';
-import { getSessionFromRequest } from '@/lib/auth';
+import { getActiveAdminSession } from '@/lib/admin-auth';
 import { headers } from 'next/headers';
 import AdminNav from './AdminNav';
 
@@ -9,7 +8,7 @@ export default async function AdminLayout({
 }: { children: React.ReactNode }) {
   const headersList = await headers();
   const cookieHeader = headersList.get('cookie');
-  const session = await getSessionFromRequest(cookieHeader);
+  const session = await getActiveAdminSession(cookieHeader).catch(() => null);
 
   return (
     <div className="min-h-screen flex flex-col" style={{ background: 'var(--bg-color)', color: 'var(--text-primary)' }}>

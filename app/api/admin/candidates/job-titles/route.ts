@@ -13,6 +13,9 @@ export async function GET(request: NextRequest) {
       FROM requisitions r
       INNER JOIN interviews i ON i.requisition_id = r.id
       WHERE r.job_title IS NOT NULL AND r.job_title != ''
+        AND NOT EXISTS (
+          SELECT 1 FROM admin_qa_report_runs q WHERE q.interview_id = i.id
+        )
       ORDER BY r.job_title
     `;
     const job_titles = (rows as { job_title: string }[]).map((r) => r.job_title);

@@ -28,6 +28,7 @@ A Next.js web application for **WV Supply** that delivers an AI-powered virtual 
 | **Admin** | Live sessions | List active interviews; open **Live Observation** for a session. |
 | **Admin** | Live observation (TTS) | Real-time transcript; OpenAI TTS playback (Interviewer: Shimmer, Candidate: Marin). Play/pause, resume real-time, click a line to play from that line. Consecutive same-speaker segments merged for TTS within 5s. |
 | **Admin** | Developer tools | Super Admin: select interview, **Compile aggregated report**, **Trigger evaluation** (OpenAI), **Deliver report (email)**. **Pushover test** button to verify notifications. |
+| **Admin** | Post-Interview Report QA | Super Admin: supply simulated report ingredients, bypass registration and LiveAvatar, then run the real evaluation, PDF, and configured-email delivery pipeline with retained history and retry. |
 | **Admin** | Settings | System instruction preface (AI evaluation); report delivery email (Resend recipient). |
 | **Admin** | Users | List users; add/edit/deactivate (Super Admin). |
 | **Backend** | Code validation | `POST /api/validate-code`: check code, deadline, 31‑min reuse from `started_at` (reuse allowed regardless of status). Pushover notification on code entry (optional). |
@@ -68,6 +69,7 @@ A Next.js web application for **WV Supply** that delivers an AI-powered virtual 
 - **Live sessions:** list active interviews → open **Live Observation** for one.  
 - **Live Observation** (`/admin/live/[id]`): real-time transcript; TTS playback (OpenAI: gpt-4o-mini-tts, Shimmer/Marin, 1.25×). Play/pause, Resume real-time, click line to play from that line; device list in popover.  
 - **Developer tools** (`/admin/developer`): Super Admin only. Select interview → Compile report, Run evaluation, Deliver report (email), Send test Pushover notification.  
+- **Post-Interview Report QA** (`/admin/report-qa`): Super Admin only. Versioned raw-ingredient form, real downstream pipeline, stage history, details, and failed-stage retry. QA records are excluded from operational candidate/session views.
 - **Settings:** Instruction preface (text for AI evaluation), Report delivery email.  
 - **Users:** list, add, edit, deactivate (Super Admin).
 
@@ -123,6 +125,9 @@ If the same code is used again within **31 minutes** of `started_at`, the code i
 | `/api/admin/developer/evaluate` | POST | Run AI evaluation for an interview. |
 | `/api/admin/developer/deliver` | POST | Send report email for an interview. |
 | `/api/admin/developer/pushover-test` | POST | Send test Pushover notification. |
+| `/api/admin/report-qa/runs` | GET, POST | List or create/process retained Post-Interview QA runs (Super Admin). |
+| `/api/admin/report-qa/runs/[id]` | GET | Inspect one QA input snapshot and result (Super Admin). |
+| `/api/admin/report-qa/runs/[id]/retry` | POST | Resume a failed QA run from its failed stage (Super Admin). |
 | `/api/admin/settings/instruction-preface` | GET, PUT | System instruction for AI. |
 | `/api/admin/settings/report-delivery-email` | GET, PUT | Report recipient email. |
 | `/api/admin/users` | GET, POST | List/create users. |
