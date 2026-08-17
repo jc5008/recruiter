@@ -50,17 +50,27 @@ async function getInstructionPreface(): Promise<string> {
  * Returns the aggregated prompt for an interview: from interview_reports.aggregated_prompt_text if present,
  * otherwise builds via aggregateInterviewData + buildAggregatedPrompt.
  */
-async function getAggregatedPromptForInterview(interviewId: string): Promise<string> {
+async function getAggregatedPromptForInterview(interviewId: string): Promise<{ prompt: string; instructionPreface: string }> {
   const sql = getSql();
   const rows = await sql`
-    SELECT aggregated_prompt_text FROM interview_reports WHERE interview_id = ${interviewId} LIMIT 1
+    SELECT aggregated_prompt_text, instruction_preface_snapshot
+    FROM interview_reports
+    WHERE interview_id = ${interviewId}
+    LIMIT 1
   `;
-  const text = (rows[0] as { aggregated_prompt_text: string | null } | undefined)?.aggregated_prompt_text;
+  const row = rows[0] as {
+    aggregated_prompt_text: string | null;
+    instruction_preface_snapshot: string | null;
+  } | undefined;
+  const text = row?.aggregated_prompt_text;
   if (text != null && text.trim() !== '') {
-    return text;
+    return {
+      prompt: text,
+      instructionPreface: row?.instruction_preface_snapshot ?? await getInstructionPreface(),
+    };
   }
   const data = await aggregateInterviewData(interviewId);
-  return buildAggregatedPrompt(data);
+  return { prompt: buildAggregatedPrompt(data), instructionPreface: data.system_instruction_preface };
 }
 
 function buildSystemMessage(instructionPreface: string): string {
@@ -94,8 +104,11 @@ export async function runEvaluation(interviewId: string): Promise<EvaluationResu
   }
 
   let aggregatedPrompt: string;
+  let instructionPreface: string;
   try {
-    aggregatedPrompt = await getAggregatedPromptForInterview(interviewId);
+    const input = await getAggregatedPromptForInterview(interviewId);
+    aggregatedPrompt = input.prompt;
+    instructionPreface = input.instructionPreface;
   } catch (err) {
     console.error('getAggregatedPromptForInterview error:', err);
     return {
@@ -104,7 +117,6 @@ export async function runEvaluation(interviewId: string): Promise<EvaluationResu
     };
   }
 
-  const instructionPreface = await getInstructionPreface();
   const systemMessage = buildSystemMessage(instructionPreface);
 
   const openai = new OpenAI({ apiKey });
@@ -169,6 +181,7 @@ export async function runEvaluation(interviewId: string): Promise<EvaluationResu
       INSERT INTO interview_reports (
         interview_id,
         aggregated_prompt_text,
+        instruction_preface_snapshot,
         ai_evaluation_json,
         token_usage_input,
         token_usage_output,
@@ -177,12 +190,14 @@ export async function runEvaluation(interviewId: string): Promise<EvaluationResu
       VALUES (
         ${interviewId},
         ${aggregatedPrompt},
+        ${instructionPreface},
         ${JSON.stringify(aiEvaluationJson)},
         ${usageInput},
         ${usageOutput},
         'PENDING'
       )
       ON CONFLICT (interview_id) DO UPDATE SET
+        instruction_preface_snapshot = COALESCE(interview_reports.instruction_preface_snapshot, ${instructionPreface}),
         ai_evaluation_json = ${JSON.stringify(aiEvaluationJson)},
         token_usage_input = ${usageInput},
         token_usage_output = ${usageOutput}

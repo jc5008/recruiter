@@ -24,6 +24,9 @@ export async function POST(request: Request) {
       FROM interviews i
       LEFT JOIN requisitions r ON r.id = i.requisition_id
       WHERE i.access_code ILIKE ${code}
+        AND NOT EXISTS (
+          SELECT 1 FROM admin_qa_report_runs q WHERE q.interview_id = i.id
+        )
       LIMIT 1
     `;
 

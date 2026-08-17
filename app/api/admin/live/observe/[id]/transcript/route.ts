@@ -31,14 +31,14 @@ export async function GET(
             AND id != ${afterId}
             AND (created_at > ${afterCreated} OR (created_at = ${afterCreated} AND id > ${afterId}))
           ORDER BY created_at ASC, id ASC
-        `;
+        ` as typeof rows;
       } else {
         rows = await sql`
           SELECT id, speaker, content, timestamp_offset_ms, created_at
           FROM transcript_segments
           WHERE interview_id = ${interviewId} AND created_at > ${afterCreated}
           ORDER BY created_at ASC, id ASC
-        `;
+        ` as typeof rows;
       }
     } else {
       rows = await sql`
@@ -46,7 +46,7 @@ export async function GET(
         FROM transcript_segments
         WHERE interview_id = ${interviewId}
         ORDER BY created_at ASC, id ASC
-      `;
+      ` as typeof rows;
     }
     const res = NextResponse.json({ segments: rows });
     res.headers.set('Cache-Control', 'private, no-store, no-cache, must-revalidate, max-age=0');

@@ -24,6 +24,9 @@ export async function GET(request: NextRequest) {
         ended_at,
         created_at
       FROM interviews
+      WHERE NOT EXISTS (
+        SELECT 1 FROM admin_qa_report_runs q WHERE q.interview_id = interviews.id
+      )
       ORDER BY created_at DESC
       LIMIT 100
     `;

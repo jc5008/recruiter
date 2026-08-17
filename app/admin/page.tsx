@@ -1,10 +1,10 @@
 import Link from 'next/link';
-import { getSessionFromRequest } from '@/lib/auth';
+import { getActiveAdminSession } from '@/lib/admin-auth';
 import { headers } from 'next/headers';
 
 export default async function AdminDashboardPage() {
   const headersList = await headers();
-  const session = await getSessionFromRequest(headersList.get('cookie'));
+  const session = await getActiveAdminSession(headersList.get('cookie')).catch(() => null);
   const isSuperAdmin = session?.role === 'SUPER_ADMIN';
 
   return (
@@ -38,6 +38,12 @@ export default async function AdminDashboardPage() {
         </li>
         {isSuperAdmin && (
           <>
+            <li>
+              <Link href="/admin/report-qa" className="block p-4 rounded-lg border border-black/08 hover:bg-black/04 transition" style={{ background: 'var(--card-bg)' }}>
+                <span className="font-medium">Post-Interview Report QA</span>
+                <span className="block text-sm sub-text mt-1">Supply simulated report ingredients and run the real evaluation, PDF, and email pipeline. Super Admin only.</span>
+              </Link>
+            </li>
             <li>
               <Link href="/admin/users" className="block p-4 rounded-lg border border-black/08 hover:bg-black/04 transition" style={{ background: 'var(--card-bg)' }}>
                 <span className="font-medium">User management</span>

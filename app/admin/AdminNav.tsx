@@ -21,6 +21,9 @@ export default function AdminNav({ role }: { role?: string }) {
       </Link>
       {isSuperAdmin && (
         <>
+          <Link href="/admin/report-qa" className="text-sm sub-text hover:opacity-80">
+            Post-Interview QA
+          </Link>
           <Link href="/admin/users" className="text-sm sub-text hover:opacity-80">
             Users
           </Link>
